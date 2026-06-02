@@ -15,6 +15,7 @@
 
 #include "acq_handler.h"
 #include "analog_mixed_signals.h"
+#include "bnet.h"
 #include "common.h"
 #include "common/version.h"
 #include "convert.hpp"
@@ -92,6 +93,15 @@ int rp_InitAdresses() {
         rp_Release();
         return ret;
     }
+
+    ret = bnet_Init();
+    if (ret != RP_OK) {
+        ERROR_LOG("Error init BNET regset. Code:  %d", ret)
+        pthread_mutex_unlock(&rp_init_mutex);
+        rp_Release();
+        return ret;
+    }
+
     g_api_state = true;
     pthread_mutex_unlock(&rp_init_mutex);
     return RP_OK;
@@ -140,6 +150,7 @@ int rp_Release() {
     pthread_mutex_lock(&rp_init_mutex);
     ECHECK_NO_RET(osc_Release())
     ECHECK_NO_RET(generate_Release())
+    ECHECK_NO_RET(bnet_Release())
     ECHECK_NO_RET(ams_Release())
     ECHECK_NO_RET(hk_Release())
     ECHECK_NO_RET(daisy_Release())

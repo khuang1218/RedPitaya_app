@@ -18,6 +18,7 @@
 #include "acquire_axi.h"
 #include "api_cmd.h"
 #include "apin.h"
+#include "bnet.h"
 #include "can.h"
 #include "common.h"
 #include "dpin.h"
@@ -234,6 +235,16 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("TRig:EXT:LEV?", RP_ExtTriggerLevelQ),
     SCPI_CMD("ACQ:TRig:EXT:DEBouncer[:US]", RP_ExtTriggerDebouncerUs),
     SCPI_CMD("ACQ:TRig:EXT:DEBouncer[:US]?", RP_ExtTriggerDebouncerUsQ),
+
+    /* Custom butterfly-network register block */
+    SCPI_CMD("BNET:RST", RP_BNetReset),
+    SCPI_CMD("BNET:START", RP_BNetStart),
+    SCPI_CMD("BNET:STATUS?", RP_BNetStatusQ),
+    SCPI_CMD("BNET:CH#:DATA", RP_BNetChannelData),
+    SCPI_CMD("BNET:CH#:DATA?", RP_BNetChannelDataQ),
+    SCPI_CMD("BNET:OUT#:DATA?", RP_BNetOutputDataQ),
+    SCPI_CMD("BNET:LED6:HB", RP_BNetLed6Heartbeat),
+    SCPI_CMD("BNET:LED6:HB?", RP_BNetLed6HeartbeatQ),
 
     /* Generate */
     SCPI_CMD("GEN:RST", RP_GenReset),

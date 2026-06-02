@@ -73,6 +73,7 @@
 %apply unsigned int *OUTPUT { uint32_t *id };
 %apply unsigned int *OUTPUT { uint32_t *raw };
 %apply unsigned int *OUTPUT { uint32_t *value };
+%apply int *OUTPUT { int32_t *value };
 %apply unsigned int *OUTPUT { uint32_t *period };
 %apply unsigned int *OUTPUT { uint32_t *length };
 %apply unsigned int *OUTPUT { uint32_t *decimation };

@@ -572,4 +572,67 @@ int rp_GetExternalTriggerLevel(float* value);
 
 ///@}
 
+/** @name Custom Butterfly Network Register Block
+ */
+///@{
+
+/**
+ * Writes one scalar BNET logical channel register.
+ * @param channel Channel index, 0..7.
+ * @param value   Signed 32-bit value to write.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetChannelData(uint32_t channel, int32_t value);
+
+/**
+ * Reads one scalar BNET logical channel register.
+ * @param channel Channel index, 0..7.
+ * @param value   Returned signed 32-bit value.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetChannelData(uint32_t channel, int32_t* value);
+
+/**
+ * Starts the scalar BNET test computation.
+ * @return RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetStart();
+
+/**
+ * Soft-resets the BNET register block.
+ * @return RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetReset();
+
+/**
+ * Reads the BNET status register.
+ * @param status Returned status bits.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStatus(uint32_t* status);
+
+/**
+ * Reads one scalar BNET output register.
+ * @param index Output index, 0..3.
+ * @param value Returned signed 32-bit value.
+ * @return      RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetOutputData(uint32_t index, int32_t* value);
+
+/**
+ * Enables or disables the custom LED6 heartbeat.
+ * @param enable true to blink LED6, false to drive LED6 low.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetLed6Heartbeat(bool enable);
+
+/**
+ * Reads the custom LED6 heartbeat enable bit.
+ * @param enable Returned heartbeat-enable state.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetLed6Heartbeat(bool* enable);
+
+///@}
+
 #endif  //__RP_H
