@@ -3,10 +3,12 @@
  */
 
 #include "bnet.h"
+#include "axi_manager.h"
 #include "common.h"
 #include "rp.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #define BNET_BASE_ADDR       0x00700000u
 #define BNET_BASE_SIZE       0x00001000u
@@ -26,6 +28,7 @@
 #define BNET_NUM_CH          8u
 #define BNET_NUM_OUT         4u
 #define BNET_MAX_STREAMS     8u
+#define BNET_MAX_DDR_SLOTS   8u
 
 #define BNET_CONTROL_START        0x1u
 #define BNET_CONTROL_RESET        0x2u
@@ -52,6 +55,14 @@
 
 static volatile uint32_t* bnet_reg = NULL;
 
+typedef struct {
+    uint64_t index;
+    uint32_t address;
+    uint32_t size;
+} bnet_ddr_slot_t;
+
+static bnet_ddr_slot_t bnet_ddr_slots[BNET_MAX_DDR_SLOTS];
+
 static inline void bnet_WriteReg(uint32_t offset, uint32_t value) {
     bnet_reg[offset / sizeof(uint32_t)] = value;
 }
@@ -72,6 +83,19 @@ static int bnet_CheckStream(uint32_t stream) {
     return RP_OK;
 }
 
+static int bnet_CheckDdrSlot(uint32_t slot) {
+    if (slot >= BNET_MAX_DDR_SLOTS)
+        return RP_EOOR;
+    return RP_OK;
+}
+
+static int bnet_CheckDdrSlotReserved(uint32_t slot) {
+    int ret = bnet_CheckDdrSlot(slot);
+    if (ret != RP_OK)
+        return ret;
+    return bnet_ddr_slots[slot].index == 0 ? RP_EOOR : RP_OK;
+}
+
 static inline uint32_t bnet_StreamRegOffset(uint32_t stream, uint32_t reg_offset) {
     return BNET_STREAM_BASE_OFFSET + BNET_STREAM_STRIDE * stream + reg_offset;
 }
@@ -88,6 +112,15 @@ int bnet_Init() {
 }
 
 int bnet_Release() {
+    for (uint32_t slot = 0; slot < BNET_MAX_DDR_SLOTS; ++slot) {
+        if (bnet_ddr_slots[slot].index != 0) {
+            axi_releaseMemory(bnet_ddr_slots[slot].index);
+            bnet_ddr_slots[slot].index = 0;
+            bnet_ddr_slots[slot].address = 0;
+            bnet_ddr_slots[slot].size = 0;
+        }
+    }
+
     if (bnet_reg == NULL)
         return RP_OK;
     return cmn_Unmap(BNET_BASE_SIZE, (void**)&bnet_reg);
@@ -500,6 +533,140 @@ int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr) {
 
     *read_ptr = bnet_ReadReg(bnet_StreamRegOffset(stream, BNET_STREAM_RPTR_OFFSET));
     return RP_OK;
+}
+
+int rp_BNetDdrGetMemoryRegion(uint32_t* start, uint32_t* size) {
+    if ((start == NULL) || (size == NULL))
+        return RP_UIA;
+
+    return axi_getOSReservedRegion(start, size);
+}
+
+int rp_BNetDdrReserve(uint32_t slot, uint32_t address, uint32_t size) {
+    int ret = bnet_CheckDdrSlot(slot);
+    if (ret != RP_OK)
+        return ret;
+
+    if (size == 0)
+        return RP_EOOR;
+
+    if (size % 0x80u) {
+        ERROR_LOG("BNET DDR slot size must be a multiple of 0x80 bytes.")
+        return RP_EOOR;
+    }
+
+    ECHECK(axi_initManager())
+
+    if (bnet_ddr_slots[slot].index != 0) {
+        axi_releaseMemory(bnet_ddr_slots[slot].index);
+        bnet_ddr_slots[slot].index = 0;
+        bnet_ddr_slots[slot].address = 0;
+        bnet_ddr_slots[slot].size = 0;
+    }
+
+    uint64_t index = 0;
+    ECHECK(axi_reserveMemory(address, size, &index))
+
+    bnet_ddr_slots[slot].index = index;
+    bnet_ddr_slots[slot].address = address;
+    bnet_ddr_slots[slot].size = size;
+    return RP_OK;
+}
+
+int rp_BNetDdrRelease(uint32_t slot) {
+    int ret = bnet_CheckDdrSlot(slot);
+    if (ret != RP_OK)
+        return ret;
+
+    if (bnet_ddr_slots[slot].index != 0)
+        axi_releaseMemory(bnet_ddr_slots[slot].index);
+
+    bnet_ddr_slots[slot].index = 0;
+    bnet_ddr_slots[slot].address = 0;
+    bnet_ddr_slots[slot].size = 0;
+    return RP_OK;
+}
+
+int rp_BNetDdrGetSlotBase(uint32_t slot, uint32_t* address) {
+    if (address == NULL)
+        return RP_UIA;
+
+    int ret = bnet_CheckDdrSlotReserved(slot);
+    if (ret != RP_OK)
+        return ret;
+
+    *address = bnet_ddr_slots[slot].address;
+    return RP_OK;
+}
+
+int rp_BNetDdrGetSlotSize(uint32_t slot, uint32_t* size) {
+    if (size == NULL)
+        return RP_UIA;
+
+    int ret = bnet_CheckDdrSlotReserved(slot);
+    if (ret != RP_OK)
+        return ret;
+
+    *size = bnet_ddr_slots[slot].size;
+    return RP_OK;
+}
+
+int rp_BNetDdrAttachStreamBuffer(uint32_t slot, uint32_t stream, uint32_t buffer) {
+    int ret = bnet_CheckDdrSlotReserved(slot);
+    if (ret != RP_OK)
+        return ret;
+
+    ret = rp_BNetSetStreamBase(stream, buffer, bnet_ddr_slots[slot].address);
+    if (ret != RP_OK)
+        return ret;
+
+    return rp_BNetSetStreamLength(stream, bnet_ddr_slots[slot].size);
+}
+
+int rp_BNetDdrWriteRaw(uint32_t slot, uint32_t offset_bytes, const uint8_t* data, uint32_t bytes) {
+    if (data == NULL)
+        return RP_UIA;
+
+    int ret = bnet_CheckDdrSlotReserved(slot);
+    if (ret != RP_OK)
+        return ret;
+
+    if ((bytes == 0) || (offset_bytes > bnet_ddr_slots[slot].size) ||
+        (bytes > bnet_ddr_slots[slot].size - offset_bytes)) {
+        return RP_EOOR;
+    }
+
+    uint16_t* buffer = NULL;
+    uint32_t size = 0;
+    ret = axi_getMapped(bnet_ddr_slots[slot].index, &buffer, &size);
+    if (ret != RP_OK)
+        return ret;
+
+    if ((offset_bytes > size) || (bytes > size - offset_bytes))
+        return RP_EOOR;
+
+    memcpy((uint8_t*)buffer + offset_bytes, data, bytes);
+    return RP_OK;
+}
+
+int rp_BNetDdrWriteI16(uint32_t slot, uint32_t offset_samples, const int16_t* data, uint32_t samples) {
+    if ((offset_samples > UINT32_MAX / sizeof(int16_t)) ||
+        (samples > UINT32_MAX / sizeof(int16_t))) {
+        return RP_EOOR;
+    }
+
+    return rp_BNetDdrWriteRaw(slot, offset_samples * sizeof(int16_t),
+                              (const uint8_t*)data, samples * sizeof(int16_t));
+}
+
+int rp_BNetDdrWriteU16(uint32_t slot, uint32_t offset_samples, const uint16_t* data, uint32_t samples) {
+    if ((offset_samples > UINT32_MAX / sizeof(uint16_t)) ||
+        (samples > UINT32_MAX / sizeof(uint16_t))) {
+        return RP_EOOR;
+    }
+
+    return rp_BNetDdrWriteRaw(slot, offset_samples * sizeof(uint16_t),
+                              (const uint8_t*)data, samples * sizeof(uint16_t));
 }
 
 int rp_BNetSetLed6Heartbeat(bool enable) {

@@ -40,6 +40,15 @@ int rp_BNetForceStreamSwap(uint32_t stream);
 int rp_BNetClearStreamError(uint32_t stream);
 int rp_BNetGetStreamStatus(uint32_t stream, uint32_t* status);
 int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr);
+int rp_BNetDdrGetMemoryRegion(uint32_t* start, uint32_t* size);
+int rp_BNetDdrReserve(uint32_t slot, uint32_t address, uint32_t size);
+int rp_BNetDdrRelease(uint32_t slot);
+int rp_BNetDdrGetSlotBase(uint32_t slot, uint32_t* address);
+int rp_BNetDdrGetSlotSize(uint32_t slot, uint32_t* size);
+int rp_BNetDdrAttachStreamBuffer(uint32_t slot, uint32_t stream, uint32_t buffer);
+int rp_BNetDdrWriteRaw(uint32_t slot, uint32_t offset_bytes, const uint8_t* data, uint32_t bytes);
+int rp_BNetDdrWriteI16(uint32_t slot, uint32_t offset_samples, const int16_t* data, uint32_t samples);
+int rp_BNetDdrWriteU16(uint32_t slot, uint32_t offset_samples, const uint16_t* data, uint32_t samples);
 int rp_BNetSetLed6Heartbeat(bool enable);
 int rp_BNetGetLed6Heartbeat(bool* enable);
 

@@ -802,6 +802,87 @@ int rp_BNetGetStreamStatus(uint32_t stream, uint32_t* status);
 int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr);
 
 /**
+ * Gets the OS-reserved DDR region available for AXI buffers.
+ * @param start Returned DDR physical start address.
+ * @param size  Returned region size in bytes.
+ * @return      RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrGetMemoryRegion(uint32_t* start, uint32_t* size);
+
+/**
+ * Reserves one BNET DDR upload slot and maps it through /dev/mem.
+ * @param slot    Software slot index, 0..7.
+ * @param address DDR physical base address.
+ * @param size    Slot size in bytes, must be a multiple of 0x80.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrReserve(uint32_t slot, uint32_t address, uint32_t size);
+
+/**
+ * Releases one BNET DDR upload slot.
+ * @param slot Software slot index, 0..7.
+ * @return     RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrRelease(uint32_t slot);
+
+/**
+ * Gets one reserved BNET DDR slot base address.
+ * @param slot    Software slot index, 0..7.
+ * @param address Returned DDR physical base address.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrGetSlotBase(uint32_t slot, uint32_t* address);
+
+/**
+ * Gets one reserved BNET DDR slot size.
+ * @param slot Software slot index, 0..7.
+ * @param size Returned slot size in bytes.
+ * @return     RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrGetSlotSize(uint32_t slot, uint32_t* size);
+
+/**
+ * Wires a reserved BNET DDR slot to a hardware stream ping/pong buffer.
+ * This sets the stream base address and length from the slot.
+ * @param slot   Software slot index, 0..7.
+ * @param stream BNET stream index.
+ * @param buffer Buffer index, 0=BASE0/ping, 1=BASE1/pong.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrAttachStreamBuffer(uint32_t slot, uint32_t stream, uint32_t buffer);
+
+/**
+ * Writes raw bytes into a reserved BNET DDR slot.
+ * Use this for byte-packed fixed-point data, for example little-endian int16 weights.
+ * @param slot         Software slot index, 0..7.
+ * @param offset_bytes Byte offset inside the slot.
+ * @param data         Source byte buffer.
+ * @param bytes        Number of bytes to write.
+ * @return             RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrWriteRaw(uint32_t slot, uint32_t offset_bytes, const uint8_t* data, uint32_t bytes);
+
+/**
+ * Writes signed 16-bit fixed-point words into a reserved BNET DDR slot.
+ * @param slot           Software slot index, 0..7.
+ * @param offset_samples Sample offset inside the slot.
+ * @param data           Source signed 16-bit buffer.
+ * @param samples        Number of 16-bit samples to write.
+ * @return               RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrWriteI16(uint32_t slot, uint32_t offset_samples, const int16_t* data, uint32_t samples);
+
+/**
+ * Writes unsigned 16-bit fixed-point words into a reserved BNET DDR slot.
+ * @param slot           Software slot index, 0..7.
+ * @param offset_samples Sample offset inside the slot.
+ * @param data           Source unsigned 16-bit buffer.
+ * @param samples        Number of 16-bit samples to write.
+ * @return               RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetDdrWriteU16(uint32_t slot, uint32_t offset_samples, const uint16_t* data, uint32_t samples);
+
+/**
  * Enables or disables the custom LED6 heartbeat.
  * @param enable true to blink LED6, false to drive LED6 low.
  * @return       RP_OK - successful, RP_E* - failure
