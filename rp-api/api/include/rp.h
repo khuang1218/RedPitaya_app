@@ -599,6 +599,12 @@ int rp_BNetGetChannelData(uint32_t channel, int32_t* value);
 int rp_BNetStart();
 
 /**
+ * Commits the inactive buffer for every enabled BNET stream.
+ * @return RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetCommitAllEnabledStreams();
+
+/**
  * Soft-resets the BNET register block.
  * @return RP_OK - successful, RP_E* - failure
  */
@@ -612,12 +618,188 @@ int rp_BNetReset();
 int rp_BNetGetStatus(uint32_t* status);
 
 /**
+ * Sets BNET input mode. 0=ASG test, 1=ADC real-time, 2=DDR streams.
+ * @param mode Input mode value.
+ * @return     RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetInputMode(uint32_t mode);
+
+/**
+ * Gets BNET input mode.
+ * @param mode Returned input mode value.
+ * @return     RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetInputMode(uint32_t* mode);
+
+/**
+ * Sets the BNET vector length register.
+ * @param samples Vector length in samples.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetVectorLength(uint32_t samples);
+
+/**
+ * Gets the BNET vector length register.
+ * @param samples Returned vector length in samples.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetVectorLength(uint32_t* samples);
+
+/**
+ * Gets the number of logical BNET DDR streams exposed by hardware.
+ * @param count Returned stream count.
+ * @return      RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamCount(uint32_t* count);
+
+/**
+ * Gets the stream active-buffer mask.
+ * @param mask Returned active mask.
+ * @return     RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetActiveMask(uint32_t* mask);
+
+/**
+ * Gets the stream pending-swap mask.
+ * @param mask Returned pending mask.
+ * @return     RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetPendingMask(uint32_t* mask);
+
+/**
+ * Gets the stream error mask.
+ * @param mask Returned error mask.
+ * @return     RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetErrorMask(uint32_t* mask);
+
+/**
  * Reads one scalar BNET output register.
  * @param index Output index, 0..3.
  * @param value Returned signed 32-bit value.
  * @return      RP_OK - successful, RP_E* - failure
  */
 int rp_BNetGetOutputData(uint32_t index, int32_t* value);
+
+/**
+ * Sets one BNET stream ping/pong base address.
+ * @param stream  Stream index.
+ * @param buffer  Buffer index, 0=BASE0/ping, 1=BASE1/pong.
+ * @param address DDR physical base address.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetStreamBase(uint32_t stream, uint32_t buffer, uint32_t address);
+
+/**
+ * Gets one BNET stream ping/pong base address.
+ * @param stream  Stream index.
+ * @param buffer  Buffer index, 0=BASE0/ping, 1=BASE1/pong.
+ * @param address Returned DDR physical base address.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamBase(uint32_t stream, uint32_t buffer, uint32_t* address);
+
+/**
+ * Sets one BNET stream buffer length.
+ * @param stream Stream index.
+ * @param bytes  Buffer length in bytes.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetStreamLength(uint32_t stream, uint32_t bytes);
+
+/**
+ * Gets one BNET stream buffer length.
+ * @param stream Stream index.
+ * @param bytes  Returned buffer length in bytes.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamLength(uint32_t stream, uint32_t* bytes);
+
+/**
+ * Sets one BNET stream byte stride.
+ * @param stream Stream index.
+ * @param bytes  Byte stride.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetStreamStride(uint32_t stream, uint32_t bytes);
+
+/**
+ * Gets one BNET stream byte stride.
+ * @param stream Stream index.
+ * @param bytes  Returned byte stride.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamStride(uint32_t stream, uint32_t* bytes);
+
+/**
+ * Sets one BNET stream format tag.
+ * @param stream Stream index.
+ * @param format Format tag value.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetStreamFormat(uint32_t stream, uint32_t format);
+
+/**
+ * Gets one BNET stream format tag.
+ * @param stream Stream index.
+ * @param format Returned format tag value.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamFormat(uint32_t stream, uint32_t* format);
+
+/**
+ * Enables or disables one BNET stream.
+ * @param stream Stream index.
+ * @param enable true to enable the stream.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetEnableStream(uint32_t stream, bool enable);
+
+/**
+ * Gets one BNET stream enable state.
+ * @param stream Stream index.
+ * @param enable Returned enable state.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamEnable(uint32_t stream, bool* enable);
+
+/**
+ * Commits one BNET stream buffer as pending.
+ * @param stream Stream index.
+ * @param buffer Buffer index, 0=BASE0/ping, 1=BASE1/pong.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetCommitStreamBuffer(uint32_t stream, uint32_t buffer);
+
+/**
+ * Forces one BNET stream to swap active buffers immediately.
+ * @param stream Stream index.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetForceStreamSwap(uint32_t stream);
+
+/**
+ * Clears descriptor error bits for one BNET stream.
+ * @param stream Stream index.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetClearStreamError(uint32_t stream);
+
+/**
+ * Gets one BNET stream status register.
+ * @param stream Stream index.
+ * @param status Returned stream status bits.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamStatus(uint32_t stream, uint32_t* status);
+
+/**
+ * Gets one BNET stream read pointer.
+ * @param stream   Stream index.
+ * @param read_ptr Returned read pointer.
+ * @return         RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr);
 
 /**
  * Enables or disables the custom LED6 heartbeat.
