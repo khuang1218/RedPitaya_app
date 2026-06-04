@@ -238,6 +238,11 @@ Slots:
 - Software slot indexes are `0..7`.
 - Slot size must currently be a multiple of `0x80` bytes, matching the existing
   generator AXI reservation convention.
+- Slot base addresses must also be page-aligned, currently use `0x1000`
+  spacing between test slots. The BNET DDR reserve path maps each slot
+  independently through `/dev/mem`, and `axi_manager::osc_axi_map()` rejects
+  non-page-aligned physical offsets. In the notebook, this means slot 0 at
+  `0x01000000` and slot 1 at `0x01001000`, not `0x01000100`.
 - `rp_BNetDdrAttachStreamBuffer()` writes the reserved slot's physical base
   address and size into the chosen BNET stream ping/pong descriptor.
 
@@ -427,6 +432,8 @@ make scpi
 5. Run a small DDR stream test:
 
 - reserve two DDR slots
+  - use page-aligned slot bases; for the default region start `0x01000000`,
+    use slot 0 at `0x01000000` and slot 1 at `0x01001000`
 - upload short known `int16` input/weight arrays
 - attach slot 0 to stream 0 and slot 1 to stream 1
 - set mode to `DDR`
