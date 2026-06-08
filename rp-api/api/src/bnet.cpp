@@ -44,6 +44,8 @@
 #define BNET_STREAM_CONTROL_OFFSET 0x14u
 #define BNET_STREAM_STATUS_OFFSET  0x18u
 #define BNET_STREAM_RPTR_OFFSET    0x1Cu
+#define BNET_STREAM_DBG0_OFFSET    0x20u
+#define BNET_STREAM_DBG1_OFFSET    0x24u
 
 #define BNET_STREAM_CONTROL_ENABLE      0x01u
 #define BNET_STREAM_CONTROL_COMMIT_BUF0 0x02u
@@ -532,6 +534,26 @@ int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr) {
         return ret;
 
     *read_ptr = bnet_ReadReg(bnet_StreamRegOffset(stream, BNET_STREAM_RPTR_OFFSET));
+    return RP_OK;
+}
+
+int rp_BNetGetStreamDebug(uint32_t stream, uint32_t index, uint32_t* value) {
+    if (value == NULL)
+        return RP_UIA;
+    if (index > 1u)
+        return RP_UIA;
+
+    int ret = bnet_CheckStream(stream);
+    if (ret != RP_OK)
+        return ret;
+
+    ret = bnet_CheckMap();
+    if (ret != RP_OK)
+        return ret;
+
+    *value = bnet_ReadReg(bnet_StreamRegOffset(stream,
+                                               index == 0u ? BNET_STREAM_DBG0_OFFSET :
+                                                             BNET_STREAM_DBG1_OFFSET));
     return RP_OK;
 }
 

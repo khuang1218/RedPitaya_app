@@ -427,6 +427,28 @@ scpi_result_t RP_BNetStreamReadPtrQ(scpi_t* context) {
     return bnet_result_uint32(context, result, read_ptr, "Failed to get BNET stream read pointer");
 }
 
+scpi_result_t RP_BNetStreamDebugQ(scpi_t* context) {
+    uint32_t stream = 0;
+    uint32_t debug_index = 0;
+    uint32_t value = 0;
+    int result = parse_bnet_index(context, 0, 7, &stream);
+    if (result != RP_OK) {
+        if (getRetOnError())
+            requestSendNewLine(context);
+        return SCPI_RES_ERR;
+    }
+
+    result = parse_bnet_index(context, 1, 1, &debug_index);
+    if (result != RP_OK) {
+        if (getRetOnError())
+            requestSendNewLine(context);
+        return SCPI_RES_ERR;
+    }
+
+    result = rp_BNetGetStreamDebug(stream, debug_index, &value);
+    return bnet_result_uint32(context, result, value, "Failed to get BNET stream debug register");
+}
+
 scpi_result_t RP_BNetDdrStartQ(scpi_t* context) {
     uint32_t start = 0;
     uint32_t size = 0;

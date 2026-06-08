@@ -40,6 +40,7 @@ int rp_BNetForceStreamSwap(uint32_t stream);
 int rp_BNetClearStreamError(uint32_t stream);
 int rp_BNetGetStreamStatus(uint32_t stream, uint32_t* status);
 int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr);
+int rp_BNetGetStreamDebug(uint32_t stream, uint32_t index, uint32_t* value);
 int rp_BNetDdrGetMemoryRegion(uint32_t* start, uint32_t* size);
 int rp_BNetDdrReserve(uint32_t slot, uint32_t address, uint32_t size);
 int rp_BNetDdrRelease(uint32_t slot);

@@ -264,6 +264,7 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("BNET:STREAM#:CLEAR", RP_BNetStreamClear),
     SCPI_CMD("BNET:STREAM#:STATUS?", RP_BNetStreamStatusQ),
     SCPI_CMD("BNET:STREAM#:RPTR?", RP_BNetStreamReadPtrQ),
+    SCPI_CMD("BNET:STREAM#:DBG#?", RP_BNetStreamDebugQ),
     SCPI_CMD("BNET:DDR:START?", RP_BNetDdrStartQ),
     SCPI_CMD("BNET:DDR:SIZE?", RP_BNetDdrSizeQ),
     SCPI_CMD("BNET:DDR:SLOT#:RESERVE", RP_BNetDdrSlotReserve),

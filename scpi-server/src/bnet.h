@@ -38,6 +38,7 @@ scpi_result_t RP_BNetStreamSwap(scpi_t* context);
 scpi_result_t RP_BNetStreamClear(scpi_t* context);
 scpi_result_t RP_BNetStreamStatusQ(scpi_t* context);
 scpi_result_t RP_BNetStreamReadPtrQ(scpi_t* context);
+scpi_result_t RP_BNetStreamDebugQ(scpi_t* context);
 scpi_result_t RP_BNetDdrStartQ(scpi_t* context);
 scpi_result_t RP_BNetDdrSizeQ(scpi_t* context);
 scpi_result_t RP_BNetDdrSlotReserve(scpi_t* context);

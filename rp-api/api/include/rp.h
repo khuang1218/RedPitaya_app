@@ -802,6 +802,15 @@ int rp_BNetGetStreamStatus(uint32_t stream, uint32_t* status);
 int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr);
 
 /**
+ * Gets one BNET stream debug register.
+ * @param stream Stream index.
+ * @param index  Debug register index, 0 or 1.
+ * @param value  Returned debug register value.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStreamDebug(uint32_t stream, uint32_t index, uint32_t* value);
+
+/**
  * Gets the OS-reserved DDR region available for AXI buffers.
  * @param start Returned DDR physical start address.
  * @param size  Returned region size in bytes.
