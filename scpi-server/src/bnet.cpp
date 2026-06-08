@@ -139,6 +139,26 @@ scpi_result_t RP_BNetModeQ(scpi_t* context) {
     return SCPI_RES_OK;
 }
 
+scpi_result_t RP_BNetConfig(scpi_t* context) {
+    uint32_t config = 0;
+    if (!SCPI_ParamUInt32(context, &config, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET configuration value.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetSetConfig(config);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to set BNET configuration", false);
+
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetConfigQ(scpi_t* context) {
+    uint32_t config = 0;
+    int result = rp_BNetGetConfig(&config);
+    return bnet_result_uint32(context, result, config, "Failed to get BNET configuration");
+}
+
 scpi_result_t RP_BNetVectorLength(scpi_t* context) {
     uint32_t samples = 0;
     if (!SCPI_ParamUInt32(context, &samples, true)) {
@@ -182,6 +202,17 @@ scpi_result_t RP_BNetErrorMaskQ(scpi_t* context) {
     uint32_t mask = 0;
     int result = rp_BNetGetErrorMask(&mask);
     return bnet_result_uint32(context, result, mask, "Failed to get BNET error stream mask");
+}
+
+scpi_result_t RP_BNetTimingQ(scpi_t* context) {
+    uint32_t index = 0;
+    uint32_t cycles = 0;
+    int result = parse_bnet_index(context, 0, 3, &index);
+    if (result != RP_OK)
+        return SCPI_RES_ERR;
+
+    result = rp_BNetGetTiming(index, &cycles);
+    return bnet_result_uint32(context, result, cycles, "Failed to get BNET timing counter");
 }
 
 scpi_result_t RP_BNetStreamBase(scpi_t* context) {

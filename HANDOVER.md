@@ -2,6 +2,8 @@
 
 Date: 2026-06-07
 
+Latest board-test update: 2026-06-08
+
 This workspace contains two separate Git repositories. Treat paths below as
 relative to each repository root because absolute paths differ between PCs.
 
@@ -30,6 +32,10 @@ Current milestone:
 - The notebook `scpi-tests/ddr_bnet_test.ipynb` now contains end-to-end DDR,
   RF loopback, maximum-length, speed, and multi-input stability tests for the
   full staged network.
+- Latest board run confirms the full fixed-length DDR path now works:
+  stream 0 consumes `2048/2048` bytes, stream 1 consumes `20480/20480` bytes,
+  BNET reports `STATUS=0x12`, `ERROR=0`, and RF OUT1 loopback matches the
+  PC-side fixed-point model with high waveform correlation.
 
 ## Repository Layout
 
@@ -475,7 +481,9 @@ Completed:
 
 ### Recent Board Debug Findings
 
-The DDR smoke test exposed two separate hardware bugs.
+The DDR smoke and RF-loopback tests exposed several important bugs. The latest
+board run confirms these fixes are working for the current fixed-length
+`VECTOR_LEN=1024` staged network.
 
 First bug, now fixed in HDL:
 
@@ -492,7 +500,7 @@ First bug, now fixed in HDL:
     AXI-side FSM on soft reset.
   - `butterfly_network.sv` resets its FSM on soft reset.
 
-Second bug, fixed in HDL but not yet verified in Vivado/board hardware:
+Second bug, fixed and verified on board:
 
 - Symptom after the reset fix: `BNET:RST` correctly cleared both pointers, but
   the DDR smoke test still timed out. At timeout, BNET was busy with no stream
@@ -522,6 +530,55 @@ actual   stream1_rptr  = 7552
     issuing the next burst.
   - FIFO write/read logic now observes `wr_rst_busy` and `rd_rst_busy`.
 
+Third bug, fixed and verified on board:
+
+- Symptom after the burst-handshake fix: stream 0 completed, but stream 1 still
+  stopped early on longer transfers. One observed run delivered all stream 0
+  bytes and only `14032/20480` stream 1 bytes.
+- Root cause: AXI read data could arrive while the async FIFO was temporarily
+  unable to accept a write, especially around reset/burst boundaries. The
+  original reader connected `rd_dval` directly to FIFO write enable, so a valid
+  AXI beat could be lost if FIFO write side was reset-busy or full.
+- Fix applied in `bnet_axi_reader_ch.sv`:
+  - Added a small AXI-clock skid buffer between `axi_rd_burst` and the async
+    FIFO.
+  - AXI `rd_drdy_i` now follows skid-buffer capacity rather than raw FIFO
+    readiness.
+  - FIFO writes drain from the skid buffer only when FIFO write side is ready.
+  - Debug register `DBG0` reports skid-buffer ready/count/overflow plus AXI and
+    FIFO state.
+- Board confirmation:
+
+```text
+Payload sizes: stream0=2048 bytes, stream1=20480 bytes
+After START: status=0x12, active=0x0, pending=0x0, error=0x0
+Stream 0: status=0x4, rptr 0 -> 2048
+Stream 1: status=0x4, rptr 0 -> 20480
+```
+
+Fourth bug, fixed in the notebook test:
+
+- Symptom: the first RF multiple-input validation failed with ramp correlation
+  around `0.496`.
+- Root cause: the test compared RF OUT1 against the full 1024-sample PC
+  reference vector. In the HDL playback state, DAC A/RF OUT1 carries the even
+  indexed `y0` stream (`expected[0::2]`), while DAC B/RF OUT2 carries the odd
+  indexed `y1` stream (`expected[1::2]`).
+- Fix applied:
+  - RF OUT1 capture and stability tests now compare against `expected[0::2]`.
+  - The RF capture cell now computes and prints a direct PC-reference
+    comparison: correlation, RMSE, and sliding offset.
+- Latest board confirmation:
+
+```text
+ramp         corr=0.996 rmse=0.090 offset=1154 repeat_delta=nan
+sine         corr=1.000 rmse=0.013 offset=1347 repeat_delta=nan
+triangle     corr=0.994 rmse=0.110 offset=223  repeat_delta=nan
+cosine_mix   corr=0.998 rmse=0.073 offset=1175 repeat_delta=nan
+ramp_repeat  corr=0.996 rmse=0.090 offset=1031 repeat_delta=0.003
+Multiple-input RF validation and repeat-stability checks passed
+```
+
 Important diagnostic limitation:
 
 - Current underrun reporting is not enough to catch starvation because top-level
@@ -546,54 +603,66 @@ Potential remaining problems to watch after rebuilding:
 
 Not yet completed:
 
-- Final HDL synthesis/implementation/timing after the latest staged-network RAM
-  inference and resource-utilization fixes.
-- Linux API compile.
-- Linux SCPI server compile/link.
-- Board-level test with an actual bitstream and SCPI client.
-- End-to-end full staged DDR upload into BNET stream readers on hardware.
-- Verification that stream 0 consumes 2048 bytes and stream 1 consumes 20480
-  bytes with error masks clear.
-- Verification that BNET RF OUT1 output is correctly routed and observed through
-  RF IN1 for the intended loopback setup.
-- Hardware execution of the maximum-length, speed, and multi-input stability
-  notebook tests.
+- Expanding beyond the current fixed hardware vector length of `1024`.
+- Turning the current fixed-length load/compute/playback transaction into a
+  true streaming design with ping-pong or ring-buffer scheduling.
+- Measuring FPGA-cycle-level throughput with hardware counters. The current
+  notebook speed number is SCPI-poll based and includes software/network
+  latency.
+- Reworking the engine/dataflow if higher sustained rate is required. The
+  current staged engine loads a complete vector and all weights, computes, then
+  loops playback; it is not yet a continuous DDR-fed pipeline.
 
 ## Recommended Next Steps
 
-1. Build software on Linux:
+1. Preserve the current working fixed-length milestone:
 
-```bash
-make librp
-make scpi
+- keep the passing bitstream/software pair identifiable
+- keep `scpi-tests/ddr_bnet_test.ipynb` as the regression suite
+- rerun DDR smoke, RF capture, maximum-length, speed, and multi-input stability
+  after any HDL/API change
+
+2. Add hardware counters for real throughput measurement:
+
+- start-to-done cycle counter inside `butterfly_network`
+- stream 0/1 delivered-word counters
+- stream starvation/backpressure counters
+- playback cycle/period counter
+
+3. Expand input size beyond `VECTOR_LEN=1024`:
+
+- parameterize `VECTOR_LEN` and check BRAM use for larger vectors
+- increase input stream length from `VECTOR_LEN * 2`
+- increase weight stream length from `VECTOR_LEN * log2(VECTOR_LEN) * 2`
+- update notebook payload generation and assertions for the larger build
+
+4. Move from fixed-length loading to actual streaming:
+
+- current behavior is still batch-style:
+
+```text
+PC uploads fixed buffers -> hardware START -> load complete vector/weights
+  -> compute complete vector -> playback loop
 ```
 
-2. Fix compile/link issues if any, especially around:
+- desired DDR-streaming behavior should be closer to:
 
-- `scpi-server/src/bnet.cpp`
-- `rp-api/api/src/bnet.cpp`
-- public prototypes in `rp-api/api/include/rp.h`
+```text
+PC keeps filling DDR ping/pong or ring buffers
+  -> FPGA readers consume buffers continuously
+  -> BNET overlaps load/compute/output where possible
+  -> software only refills/commits buffers ahead of the hardware read pointer
+```
 
-3. Build FPGA beyond syntax:
+- likely HDL work:
+  - ping-pong or ring-buffer scheduler for stream descriptors
+  - interrupt/status or watermark when a buffer has been consumed
+  - decouple load, compute, and playback stages so DDR can refill the next
+    vector while the current vector computes or outputs
+  - consider whether weights are static per run, streamed per vector, or stored
+    once in BRAM/DDR and reused
 
-- run synthesis
-- run implementation
-- inspect timing
-- check AXI reader resource usage
-- confirm `bank0`, `bank1`, and `weight_ram` infer as block RAM
-- confirm the serialized multiplier/full staged engine fits the Zynq-7020
-
-4. Deploy bitstream and software to the board.
-
-5. Run the notebook checks in `scpi-tests/ddr_bnet_test.ipynb`:
-
-- DDR slot smoke test for the full staged network
-- RF OUT1 to RF IN1 full-network capture
-- maximum-length input test
-- output speed test
-- multiple-input output validation and stability test
-
-6. If running the SCPI flow manually, use the full staged DDR sizes:
+5. If running the SCPI flow manually, use the current full staged DDR sizes:
 
 - reserve two DDR slots
   - use page-aligned slot bases; for the default region start `0x01000000`,
@@ -607,8 +676,8 @@ make scpi
   - stream 0 read pointer should reach at least 2048 bytes
   - stream 1 read pointer should reach at least 20480 bytes
 
-7. Keep or extract the notebook helpers into a Python PC-side script once the
-SCPI server compiles cleanly. The helper should:
+6. Keep or extract the notebook helpers into a Python PC-side script once the
+streaming architecture is chosen. The helper should:
 
 - quantize float weights to fixed-point
 - pack arrays as little-endian `int16`

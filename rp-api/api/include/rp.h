@@ -632,6 +632,22 @@ int rp_BNetSetInputMode(uint32_t mode);
 int rp_BNetGetInputMode(uint32_t* mode);
 
 /**
+ * Writes the full BNET configuration register.
+ * CONFIG[1:0] selects input mode, CONFIG[2] enables auto ping/pong swap on done,
+ * and CONFIG[3] enables auto-restart after auto-swap.
+ * @param config Raw configuration bits.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetConfig(uint32_t config);
+
+/**
+ * Reads the full BNET configuration register.
+ * @param config Returned raw configuration bits.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetConfig(uint32_t* config);
+
+/**
  * Sets the BNET vector length register.
  * @param samples Vector length in samples.
  * @return        RP_OK - successful, RP_E* - failure
@@ -680,6 +696,16 @@ int rp_BNetGetErrorMask(uint32_t* mask);
  * @return      RP_OK - successful, RP_E* - failure
  */
 int rp_BNetGetOutputData(uint32_t index, int32_t* value);
+
+/**
+ * Reads one BNET hardware timing counter from the last run.
+ * Index 0=total start-to-done, 1=load, 2=compute, 3=playback period.
+ * Values are adc_clk cycles.
+ * @param index  Timing counter index.
+ * @param cycles Returned cycle count.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetTiming(uint32_t index, uint32_t* cycles);
 
 /**
  * Sets one BNET stream ping/pong base address.
