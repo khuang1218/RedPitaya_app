@@ -469,6 +469,80 @@ Completed:
 - Notebook Python code-cell parsing passed after the full-network DDR/RF test
   updates.
 - `git diff --check` passed for `scpi-tests/ddr_bnet_test.ipynb`.
+- Board diagnostics confirmed the latest bitstream includes the BNET soft-reset
+  path: after `BNET:RST`, both `BNET:STREAM0:RPTR?` and
+  `BNET:STREAM1:RPTR?` returned `0`.
+
+### Recent Board Debug Findings
+
+The DDR smoke test exposed two separate hardware bugs.
+
+First bug, now fixed in HDL:
+
+- Symptom: immediately after `BNET:RST`, stream read pointers remained nonzero
+  from a previous run, for example `stream0_rptr=1152` and
+  `stream1_rptr=7528`.
+- Root cause: `BNET:RST` reset `bnet_regs`, but the soft-reset pulse was not
+  exported to the DDR readers or the staged butterfly engine.
+- Fix applied:
+  - `bnet_regs.sv` now exports `soft_reset_pulse_o`.
+  - `red_pitaya_top_LED7_mod.sv` wires `bnet_soft_reset_pulse` into both DDR
+    readers and `butterfly_network`.
+  - `bnet_axi_reader_ch.sv` resets visible read-pointer/output state and its
+    AXI-side FSM on soft reset.
+  - `butterfly_network.sv` resets its FSM on soft reset.
+
+Second bug, fixed in HDL but not yet verified in Vivado/board hardware:
+
+- Symptom after the reset fix: `BNET:RST` correctly cleared both pointers, but
+  the DDR smoke test still timed out. At timeout, BNET was busy with no stream
+  error and only partial consumption:
+
+```text
+expected stream0 bytes = 2048
+actual   stream0_rptr  = 1152
+
+expected stream1 bytes = 20480
+actual   stream1_rptr  = 7552
+```
+
+- Interpretation: `BNET:START` was accepted and both DDR readers began
+  streaming, but the readers stopped before the configured buffers drained. The
+  staged butterfly engine then remained busy, most likely waiting in load state
+  for missing samples/weights.
+- Likely root cause: `bnet_axi_reader_ch.sv` issued read bursts based on
+  `axi_rd_burst.ctrl_busy_o`, but `ctrl_busy_o` is registered/delayed inside
+  `axi_rd_burst`. The reader could therefore issue another `ctrl_val` before
+  the previous burst was visibly busy, causing `bytes_requested_axi` to run
+  ahead of actual delivered DDR data.
+- Fix applied:
+  - Added `ctrl_req_inflight_axi` and `ctrl_busy_seen_axi` in
+    `bnet_axi_reader_ch.sv`.
+  - The reader now waits for each AXI burst to go busy and then idle before
+    issuing the next burst.
+  - FIFO write/read logic now observes `wr_rst_busy` and `rd_rst_busy`.
+
+Important diagnostic limitation:
+
+- Current underrun reporting is not enough to catch starvation because top-level
+  `consume_i` is gated by reader `valid_o`. If the reader becomes empty while
+  the butterfly engine is ready, `consume_i` is false and `underrun_o` may not
+  assert. A future debug pass should add explicit reader diagnostics such as
+  requested byte count, delivered AXI beat count, FIFO empty/full state, and
+  load-state counters.
+
+Potential remaining problems to watch after rebuilding:
+
+- If `RPTR` reaches `2048` and `20480` but `STATUS[1]` still never sets, the
+  next bug is likely inside `butterfly_network.sv`, not the DDR reader.
+- If `RPTR` still stops early, inspect the AXI reader internals: `running_axi`,
+  `bytes_requested_axi`, `ctrl_req_inflight_axi`, `ctrl_busy`, FIFO flags, and
+  whether `axi2_sys`/`axi3_sys` are receiving read data.
+- Confirm in Vivado hierarchy that ASG deep-memory AXI is really stubbed and
+  only BNET drives `axi2_sys`/`axi3_sys`.
+- Confirm `asg_dat_fifo` IP remains `96` bits wide with enough depth. The
+  checked XCI currently shows `Input_Data_Width=96`, `Output_Data_Width=96`,
+  and `Input_Depth=256`, which matches `{rd_addr, rd_data}`.
 
 Not yet completed:
 
