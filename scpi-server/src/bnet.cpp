@@ -431,14 +431,7 @@ scpi_result_t RP_BNetStreamDebugQ(scpi_t* context) {
     uint32_t stream = 0;
     uint32_t debug_index = 0;
     uint32_t value = 0;
-    int result = parse_bnet_index(context, 0, 7, &stream);
-    if (result != RP_OK) {
-        if (getRetOnError())
-            requestSendNewLine(context);
-        return SCPI_RES_ERR;
-    }
-
-    result = parse_bnet_index(context, 1, 1, &debug_index);
+    int result = parse_bnet_indices(context, 0, 7, &stream, 0, 1, &debug_index);
     if (result != RP_OK) {
         if (getRetOnError())
             requestSendNewLine(context);
