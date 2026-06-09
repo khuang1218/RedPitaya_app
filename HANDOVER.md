@@ -4,6 +4,8 @@ Date: 2026-06-07
 
 Latest board-test update: 2026-06-08
 
+Latest source update: 2026-06-08 later pass
+
 This workspace contains two separate Git repositories. Treat paths below as
 relative to each repository root because absolute paths differ between PCs.
 
@@ -24,18 +26,23 @@ Current milestone:
 - BNET is mapped into the Red Pitaya FPGA system bus at `sys[7]`.
 - Hardware supports scalar/debug control plus a DDR-backed stream reader path.
 - The butterfly engine has been expanded from a first-stage pair test into a
-  full staged fixed-point network for `VECTOR_LEN=1024`.
-- DDR stream 0 supplies the 1024 input samples; DDR stream 1 supplies all
-  `1024 * log2(1024) = 10240` packed stage-weight words.
+  full staged fixed-point network. The latest board-proven bitstream used
+  `VECTOR_LEN=1024`; the current source now targets `VECTOR_LEN=2048`.
+- DDR stream 0 supplies the input samples; DDR stream 1 supplies all
+  `VECTOR_LEN * log2(VECTOR_LEN)` packed stage-weight words.
 - Software API exposes BNET registers, stream descriptors, and raw DDR upload.
 - SCPI exposes those API calls for Ethernet control.
 - The notebook `scpi-tests/ddr_bnet_test.ipynb` now contains end-to-end DDR,
   RF loopback, maximum-length, speed, and multi-input stability tests for the
   full staged network.
-- Latest board run confirms the full fixed-length DDR path now works:
+- Latest board run confirms the full fixed-length DDR path works for the
+  `VECTOR_LEN=1024` bitstream:
   stream 0 consumes `2048/2048` bytes, stream 1 consumes `20480/20480` bytes,
   BNET reports `STATUS=0x12`, `ERROR=0`, and RF OUT1 loopback matches the
   PC-side fixed-point model with high waveform correlation.
+- Current source changes after that run add `VECTOR_LEN=2048`, hardware timing
+  counters, and guarded ping-pong auto-swap/auto-restart support. Rebuild and
+  board-test those changes before treating them as validated.
 
 ## Repository Layout
 
@@ -101,10 +108,10 @@ stimulus, while the full staged network test should use BNET DDR mode.
 For the current full-network build:
 
 ```text
-VECTOR_LEN     = 1024
-STAGE_COUNT    = log2(1024) = 10
-PAIR_COUNT     = 512 butterflies per stage
-TOTAL_WEIGHTS  = 10240 packed weight words
+VECTOR_LEN     = 2048
+STAGE_COUNT    = log2(2048) = 11
+PAIR_COUNT     = 1024 butterflies per stage
+TOTAL_WEIGHTS  = 22528 packed weight words
 ```
 
 The staged engine loads the input vector, loads all stage weights, computes each
@@ -130,14 +137,15 @@ Top-level behavior:
   - stream 0: sample/input stream via `axi2_sys`
   - stream 1: weight stream via `axi3_sys`
 - The staged network now has separate sample and weight handshakes. This is
-  required because stream 0 is only 1024 words, while stream 1 is 10240 words.
+  required because stream 0 is one input vector, while stream 1 carries one
+  packed weight word for every element in every stage.
 - DDR mode consumes stream 0 when `sample_ready_o && stream0_valid`, and consumes
   stream 1 when `weight_ready_o && stream1_valid`.
 - For a real full-network DDR test:
 
 ```text
-stream 0 length = VECTOR_LEN * 2 bytes = 2048 bytes
-stream 1 length = VECTOR_LEN * STAGE_COUNT * 2 bytes = 20480 bytes
+stream 0 length = VECTOR_LEN * 2 bytes = 4096 bytes
+stream 1 length = VECTOR_LEN * STAGE_COUNT * 2 bytes = 45056 bytes
 ```
 
 ### BNET Register Map
@@ -155,8 +163,24 @@ Offsets are relative to `0x00700000`.
 | `0x40` | `ACTIVE_MASK` | RO | active-buffer mask |
 | `0x44` | `PENDING_MASK` | RO | pending-swap mask |
 | `0x48` | `ERROR_MASK` | RO | stream error mask |
-| `0x4c` | `CONFIG` | RW | bits `1:0` select input mode |
+| `0x4c` | `CONFIG` | RW | input mode plus ping-pong control bits |
+| `0x50` | `TIME_TOTAL` | RO | last start-to-done cycle count |
+| `0x54` | `TIME_LOAD` | RO | last load-state cycle count |
+| `0x58` | `TIME_COMPUTE` | RO | last compute-state cycle count |
+| `0x5c` | `TIME_PLAYBACK` | RO | last playback cycle count |
 | `0x100 + n*0x40` | stream window | RW/RO | stream descriptor block |
+
+`CONFIG` bits:
+
+| Bit(s) | Meaning |
+| --- | --- |
+| `1:0` | input mode: `0` ASG, `1` ADC, `2` DDR |
+| `2` | auto-swap to a valid pending ping/pong buffer when compute finishes |
+| `3` | auto-restart after a successful auto-swap |
+
+Auto-restart is guarded in hardware: it only fires if enabled streams have a
+valid pending inactive buffer and no stream/descriptor error. Software must
+commit the next inactive buffer while the current buffer is running.
 
 `CONTROL` bits currently used:
 
@@ -220,8 +244,11 @@ It maps:
 ### Stream/Register API
 
 - `rp_BNetCommitAllEnabledStreams()`
+- `rp_BNetSetConfig(uint32_t config)`
+- `rp_BNetGetConfig(uint32_t* config)`
 - `rp_BNetSetInputMode(uint32_t mode)`
 - `rp_BNetGetInputMode(uint32_t* mode)`
+- `rp_BNetGetTiming(uint32_t index, uint32_t* cycles)`
 - `rp_BNetSetVectorLength(uint32_t samples)`
 - `rp_BNetGetVectorLength(uint32_t* samples)`
 - `rp_BNetGetStreamCount(uint32_t* count)`
@@ -336,8 +363,11 @@ Expected scalar output: `OUT0_DATA` returns `42`.
 ### Stream/Register Commands
 
 - `BNET:COMMIT:ALL`
+- `BNET:CONFIG <value>`
+- `BNET:CONFIG?`
 - `BNET:MODE ASG|ADC|DDR`
 - `BNET:MODE?`
+- `BNET:TIME#?`
 - `BNET:VLEN <samples>`
 - `BNET:VLEN?`
 - `BNET:STREAM:COUNT?`
@@ -380,24 +410,28 @@ Example DDR/fixed-point flow:
 BNET:DDR:START?
 BNET:DDR:SIZE?
 
-BNET:DDR:SLOT0:RESERVE <aligned_start>,2048
-BNET:DDR:SLOT0:OFFSET0:DATA2048 <packed little-endian int16 input bytes>
+BNET:DDR:SLOT0:RESERVE <aligned_start>,4096
+BNET:DDR:SLOT0:OFFSET0:DATA4096 <packed little-endian int16 input bytes>
 BNET:DDR:SLOT0:STREAM0:BUF0
 
-BNET:DDR:SLOT1:RESERVE <page_aligned_slot1>,20480
+BNET:DDR:SLOT1:RESERVE <page_aligned_slot1>,45056
 BNET:DDR:SLOT1:OFFSET0:DATA# <packed little-endian int16 staged weight bytes>
 BNET:DDR:SLOT1:STREAM1:BUF0
 
-BNET:VLEN 1024
+BNET:VLEN 2048
 BNET:STREAM0:FORMAT 0
 BNET:STREAM1:FORMAT 0
 BNET:STREAM0:ENABLE 1
 BNET:STREAM1:ENABLE 1
 BNET:STREAM0:COMMIT0
 BNET:STREAM1:COMMIT0
-BNET:MODE DDR
+BNET:CONFIG 2
 BNET:START
 BNET:STATUS?
+BNET:TIME0?
+BNET:TIME1?
+BNET:TIME2?
+BNET:TIME3?
 BNET:STREAM0:STATUS?
 BNET:STREAM1:STATUS?
 BNET:STREAM0:RPTR?
@@ -415,13 +449,18 @@ block toward a DDR-backed full staged butterfly compute block.
 - Two hardware DDR streams were wired into the BNET top-level path.
 - The BNET input source became selectable: ASG test, ADC real-time, or DDR.
 - Ping-pong stream descriptors were added through BNET registers.
-- The butterfly network was expanded into a serial full staged radix-2 engine:
-  1024 input samples, 10 stages, and 10240 packed weight words.
+- The butterfly network was expanded into a serial full staged radix-2 engine.
+  The latest board-proven build used 1024 input samples, 10 stages, and 10240
+  packed weight words; the current source now uses 2048 input samples, 11
+  stages, and 22528 packed weight words.
 - The network now uses independent sample and weight valid/ready handshakes, so
   the short sample stream and long staged-weight stream can drain correctly from
   DDR.
 - BNET status now reflects compute progress: busy, done, and playback-valid are
   exported through the register block.
+- Added high-level hardware timing counters for total, load, compute, and
+  playback phases, exposed through API and `BNET:TIME0?..BNET:TIME3?`.
+- Added guarded ping-pong auto-swap and auto-restart control bits in `CONFIG`.
 - Resource/utilization fixes were applied in the FPGA repo after Vivado DRC and
   RAM inference feedback: BRAM hints, serialized multiply states, explicit
   true-dual-port RAM wrappers, and separate write processes for Vivado 2020.1
@@ -439,7 +478,8 @@ block toward a DDR-backed full staged butterfly compute block.
 
 ### SCPI
 
-- Added `BNET:MODE`, `BNET:STREAM#:...`, and global status/mask queries.
+- Added `BNET:MODE`, `BNET:CONFIG`, `BNET:TIME#?`, `BNET:STREAM#:...`, and
+  global status/mask queries.
 - Added `BNET:DDR:SLOT#...` commands to reserve, write, and attach DDR buffers.
 - Kept old scalar/debug BNET commands so the simple register test remains
   available.
@@ -450,9 +490,9 @@ block toward a DDR-backed full staged butterfly compute block.
 
 - Added full-network fixed-point helpers for signed 14-bit samples and packed
   Q1.6 stage weights.
-- Rewrote the DDR slot smoke test to upload:
-  - stream 0: 1024 input samples / 2048 bytes
-  - stream 1: 10240 packed weight words / 20480 bytes
+- Rewrote the DDR slot smoke test to upload the current source payload:
+  - stream 0: 2048 input samples / 4096 bytes
+  - stream 1: 22528 packed weight words / 45056 bytes
 - Added comments to the DDR smoke-test commands so the reservation, upload,
   descriptor attach, commit, mode select, start, status, and read-pointer checks
   are easier to follow.
@@ -482,7 +522,7 @@ Completed:
 ### Recent Board Debug Findings
 
 The DDR smoke and RF-loopback tests exposed several important bugs. The latest
-board run confirms these fixes are working for the current fixed-length
+board run confirms these fixes are working for the board-proven fixed-length
 `VECTOR_LEN=1024` staged network.
 
 First bug, now fixed in HDL:
@@ -590,8 +630,10 @@ Important diagnostic limitation:
 
 Potential remaining problems to watch after rebuilding:
 
-- If `RPTR` reaches `2048` and `20480` but `STATUS[1]` still never sets, the
-  next bug is likely inside `butterfly_network.sv`, not the DDR reader.
+- If `RPTR` reaches the expected stream lengths but `STATUS[1]` still never
+  sets, the next bug is likely inside `butterfly_network.sv`, not the DDR
+  reader. For the board-proven 1024 build those lengths were `2048` and
+  `20480`; for the current 2048 source they should be `4096` and `45056`.
 - If `RPTR` still stops early, inspect the AXI reader internals: `running_axi`,
   `bytes_requested_axi`, `ctrl_req_inflight_axi`, `ctrl_busy`, FIFO flags, and
   whether `axi2_sys`/`axi3_sys` are receiving read data.
@@ -603,12 +645,13 @@ Potential remaining problems to watch after rebuilding:
 
 Not yet completed:
 
-- Expanding beyond the current fixed hardware vector length of `1024`.
+- Board-validating the current `VECTOR_LEN=2048` source build, then expanding
+  beyond it if utilization and timing allow.
 - Turning the current fixed-length load/compute/playback transaction into a
   true streaming design with ping-pong or ring-buffer scheduling.
-- Measuring FPGA-cycle-level throughput with hardware counters. The current
-  notebook speed number is SCPI-poll based and includes software/network
-  latency.
+- Adding lower-level reader diagnostics such as delivered-word, starvation, and
+  backpressure counters. High-level total/load/compute/playback counters now
+  exist, while SCPI-poll timing still includes software/network latency.
 - Reworking the engine/dataflow if higher sustained rate is required. The
   current staged engine loads a complete vector and all weights, computes, then
   loops playback; it is not yet a continuous DDR-fed pipeline.
@@ -622,16 +665,17 @@ Not yet completed:
 - rerun DDR smoke, RF capture, maximum-length, speed, and multi-input stability
   after any HDL/API change
 
-2. Add hardware counters for real throughput measurement:
+2. Use the new timing counters for real throughput measurement:
 
-- start-to-done cycle counter inside `butterfly_network`
-- stream 0/1 delivered-word counters
-- stream starvation/backpressure counters
-- playback cycle/period counter
+- query `BNET:TIME0?..BNET:TIME3?` after each run
+- compare hardware cycle counts with the notebook's wall-clock timing
+- add stream 0/1 delivered-word counters next
+- add stream starvation/backpressure counters next
 
-3. Expand input size beyond `VECTOR_LEN=1024`:
+3. Validate and expand input size beyond the current `VECTOR_LEN=2048` source:
 
-- parameterize `VECTOR_LEN` and check BRAM use for larger vectors
+- build the 2048 source in Vivado and check BRAM use/timing first
+- parameterize/check larger vectors only after the 2048 bitstream is stable
 - increase input stream length from `VECTOR_LEN * 2`
 - increase weight stream length from `VECTOR_LEN * log2(VECTOR_LEN) * 2`
 - update notebook payload generation and assertions for the larger build
@@ -667,14 +711,16 @@ PC keeps filling DDR ping/pong or ring buffers
 - reserve two DDR slots
   - use page-aligned slot bases; for the default region start `0x01000000`,
     use slot 0 at `0x01000000` and slot 1 at `0x01001000`
-- upload 1024 `int16` input samples to stream 0
-- upload 10240 packed `int16` stage-weight words to stream 1
+- upload 2048 `int16` input samples to stream 0
+- upload 22528 packed `int16` stage-weight words to stream 1
 - attach slot 0 to stream 0 and slot 1 to stream 1
-- set mode to `DDR`
+- set config to `2` for DDR one-shot, `6` for DDR plus auto-swap, or `14` for
+  DDR plus auto-swap plus auto-restart
 - start BNET
 - check `BNET:STATUS?`, `BNET:ERROR?`, stream status, and read pointers
-  - stream 0 read pointer should reach at least 2048 bytes
-  - stream 1 read pointer should reach at least 20480 bytes
+  - stream 0 read pointer should reach at least 4096 bytes
+  - stream 1 read pointer should reach at least 45056 bytes
+  - timing registers should be nonzero after `done`
 
 6. Keep or extract the notebook helpers into a Python PC-side script once the
 streaming architecture is chosen. The helper should:
