@@ -128,19 +128,11 @@ int axi_getOSReservedRegion(uint32_t* _startAddress, uint32_t* _size) {
 }
 
 int axi_checkOverlapped(const block_t& block) {
-    bool overlaped = false;
     for (auto& it : g_reserved) {
-        if (it.start <= block.start && block.start <= it.end) {
-            overlaped |= true;
-        }
-        if (it.start <= block.end && block.end <= it.end) {
-            overlaped |= true;
-        }
-        if (block.start <= it.start && it.end <= block.end) {
-            overlaped |= true;
-        }
+        if ((block.start < it.end) && (it.start < block.end))
+            return true;
     }
-    return overlaped;
+    return false;
 };
 
 int axi_checkOverlapped(uint32_t _startAddress, uint32_t _size) {
@@ -154,7 +146,7 @@ int axi_reserveMemory(uint32_t _startAddress, uint32_t _size, uint64_t* _index) 
     block_t block{_startAddress, _size, *_index};
     if (axi_checkOverlapped(block)) {
         ERROR_LOG("Memory overlapped")
-        return -1;
+        return RP_EOOR;
     }
 
     if (_startAddress == 0 && _size == 0) {
