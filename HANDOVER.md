@@ -65,6 +65,7 @@ Important hardware files:
 - `prj/v0.94/rtl/bnet_regs.sv`
 - `prj/v0.94/rtl/bnet_axi_reader_ch.sv`
 - `prj/v0.94/rtl/butterfly_network.sv`
+- `prj/v0.94/rtl/butterfly_network_static_pipeline.sv`
 - `prj/v0.94/rtl/red_pitaya_top_LED7_mod.sv`
 - `HANDOVER_bnet_ddr_reader_compile_check.md`
 - `HANDOVER_butterfly_network.md`
@@ -177,10 +178,22 @@ Offsets are relative to `0x00700000`.
 | `1:0` | input mode: `0` ASG, `1` ADC, `2` DDR |
 | `2` | auto-swap to a valid pending ping/pong buffer when compute finishes |
 | `3` | auto-restart after a successful auto-swap |
+| `4` | static weight reuse: skip stream 1 and reuse weights already loaded |
+| `5` | static-weight frame pipeline enable in DDR mode |
 
 Auto-restart is guarded in hardware: it only fires if enabled streams have a
 valid pending inactive buffer and no stream/descriptor error. Software must
 commit the next inactive buffer while the current buffer is running.
+
+Static weight reuse preserves the current variable-weight training path while
+starting the fixed-weight hardware path. Run once with bit 4 clear to load the
+full staged weight RAM from stream 1. Then set bit 4 and run with only stream 0
+enabled/committed; BNET reuses the BRAM-resident weights and only consumes the
+input vector.
+
+Static pipeline mode is selected with bit 5 while `CONFIG[1:0]` is DDR. It uses
+the new fixed-weight frame-pipelined hardware path after its per-stage weights
+have been loaded. The raw config value for DDR pipeline mode is `34`.
 
 `CONTROL` bits currently used:
 
@@ -248,6 +261,10 @@ It maps:
 - `rp_BNetGetConfig(uint32_t* config)`
 - `rp_BNetSetInputMode(uint32_t mode)`
 - `rp_BNetGetInputMode(uint32_t* mode)`
+- `rp_BNetSetStaticWeightReuse(bool enable)`
+- `rp_BNetGetStaticWeightReuse(bool* enable)`
+- `rp_BNetSetStaticPipeline(bool enable)`
+- `rp_BNetGetStaticPipeline(bool* enable)`
 - `rp_BNetGetTiming(uint32_t index, uint32_t* cycles)`
 - `rp_BNetSetVectorLength(uint32_t samples)`
 - `rp_BNetGetVectorLength(uint32_t* samples)`
@@ -367,6 +384,10 @@ Expected scalar output: `OUT0_DATA` returns `42`.
 - `BNET:CONFIG?`
 - `BNET:MODE ASG|ADC|DDR`
 - `BNET:MODE?`
+- `BNET:WEIGHT:REUSE <0|1>`
+- `BNET:WEIGHT:REUSE?`
+- `BNET:PIPELINE <0|1>`
+- `BNET:PIPELINE?`
 - `BNET:TIME#?`
 - `BNET:VLEN <samples>`
 - `BNET:VLEN?`
@@ -715,7 +736,9 @@ PC keeps filling DDR ping/pong or ring buffers
 - upload 22528 packed `int16` stage-weight words to stream 1
 - attach slot 0 to stream 0 and slot 1 to stream 1
 - set config to `2` for DDR one-shot, `6` for DDR plus auto-swap, or `14` for
-  DDR plus auto-swap plus auto-restart
+  DDR plus auto-swap plus auto-restart. Use `18` for DDR one-shot with
+  preloaded static weight reuse, or `34` for DDR static pipeline mode. The named
+  SCPI helpers are `BNET:WEIGHT:REUSE <0|1>` and `BNET:PIPELINE <0|1>`.
 - start BNET
 - check `BNET:STATUS?`, `BNET:ERROR?`, stream status, and read pointers
   - stream 0 read pointer should reach at least 4096 bytes
@@ -794,5 +817,6 @@ Hardware repo modified/added files from the DDR reader milestone:
 - `prj/v0.94/rtl/bnet_regs.sv`
 - `prj/v0.94/rtl/bnet_axi_reader_ch.sv`
 - `prj/v0.94/rtl/butterfly_network.sv`
+- `prj/v0.94/rtl/butterfly_network_static_pipeline.sv`
 - `prj/v0.94/rtl/red_pitaya_top_LED7_mod.sv`
 

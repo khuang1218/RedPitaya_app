@@ -159,6 +159,50 @@ scpi_result_t RP_BNetConfigQ(scpi_t* context) {
     return bnet_result_uint32(context, result, config, "Failed to get BNET configuration");
 }
 
+scpi_result_t RP_BNetStaticWeightReuse(scpi_t* context) {
+    scpi_bool_t enable = FALSE;
+    if (!SCPI_ParamBool(context, &enable, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET static weight reuse state.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetSetStaticWeightReuse(enable);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to set BNET static weight reuse state", false);
+
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetStaticWeightReuseQ(scpi_t* context) {
+    bool enable = false;
+    int result = rp_BNetGetStaticWeightReuse(&enable);
+    return bnet_result_uint32(context, result, enable ? 1u : 0u,
+                              "Failed to get BNET static weight reuse state");
+}
+
+scpi_result_t RP_BNetStaticPipeline(scpi_t* context) {
+    scpi_bool_t enable = FALSE;
+    if (!SCPI_ParamBool(context, &enable, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET static pipeline state.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetSetStaticPipeline(enable);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to set BNET static pipeline state", false);
+
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetStaticPipelineQ(scpi_t* context) {
+    bool enable = false;
+    int result = rp_BNetGetStaticPipeline(&enable);
+    return bnet_result_uint32(context, result, enable ? 1u : 0u,
+                              "Failed to get BNET static pipeline state");
+}
+
 scpi_result_t RP_BNetVectorLength(scpi_t* context) {
     uint32_t samples = 0;
     if (!SCPI_ParamUInt32(context, &samples, true)) {

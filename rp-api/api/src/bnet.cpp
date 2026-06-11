@@ -57,7 +57,9 @@
 #define BNET_STREAM_CONTROL_FORCE_SWAP  0x08u
 #define BNET_STREAM_CONTROL_CLEAR_ERROR 0x10u
 
-#define BNET_CONFIG_INPUT_MODE_MASK 0x03u
+#define BNET_CONFIG_INPUT_MODE_MASK     0x03u
+#define BNET_CONFIG_STATIC_WEIGHT_REUSE 0x10u
+#define BNET_CONFIG_STATIC_PIPELINE     0x20u
 
 static volatile uint32_t* bnet_reg = NULL;
 
@@ -81,6 +83,32 @@ static int bnet_CheckMap() {
     if (bnet_reg != NULL)
         return RP_OK;
     return bnet_Init();
+}
+
+static int bnet_SetConfigBit(uint32_t mask, bool enable) {
+    int ret = bnet_CheckMap();
+    if (ret != RP_OK)
+        return ret;
+
+    uint32_t config = bnet_ReadReg(BNET_CONFIG_OFFSET);
+    if (enable)
+        config |= mask;
+    else
+        config &= ~mask;
+    bnet_WriteReg(BNET_CONFIG_OFFSET, config);
+    return RP_OK;
+}
+
+static int bnet_GetConfigBit(uint32_t mask, bool* enable) {
+    if (enable == NULL)
+        return RP_UIA;
+
+    int ret = bnet_CheckMap();
+    if (ret != RP_OK)
+        return ret;
+
+    *enable = (bnet_ReadReg(BNET_CONFIG_OFFSET) & mask) != 0;
+    return RP_OK;
 }
 
 static int bnet_CheckStream(uint32_t stream) {
@@ -246,6 +274,22 @@ int rp_BNetGetConfig(uint32_t* config) {
 
     *config = bnet_ReadReg(BNET_CONFIG_OFFSET);
     return RP_OK;
+}
+
+int rp_BNetSetStaticWeightReuse(bool enable) {
+    return bnet_SetConfigBit(BNET_CONFIG_STATIC_WEIGHT_REUSE, enable);
+}
+
+int rp_BNetGetStaticWeightReuse(bool* enable) {
+    return bnet_GetConfigBit(BNET_CONFIG_STATIC_WEIGHT_REUSE, enable);
+}
+
+int rp_BNetSetStaticPipeline(bool enable) {
+    return bnet_SetConfigBit(BNET_CONFIG_STATIC_PIPELINE, enable);
+}
+
+int rp_BNetGetStaticPipeline(bool* enable) {
+    return bnet_GetConfigBit(BNET_CONFIG_STATIC_PIPELINE, enable);
 }
 
 int rp_BNetSetVectorLength(uint32_t samples) {

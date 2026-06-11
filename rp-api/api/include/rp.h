@@ -634,7 +634,9 @@ int rp_BNetGetInputMode(uint32_t* mode);
 /**
  * Writes the full BNET configuration register.
  * CONFIG[1:0] selects input mode, CONFIG[2] enables auto ping/pong swap on done,
- * and CONFIG[3] enables auto-restart after auto-swap.
+ * CONFIG[3] enables auto-restart after auto-swap, CONFIG[4] enables static
+ * weight reuse in the serial engine, and CONFIG[5] enables the static-weight
+ * frame pipeline in DDR mode.
  * @param config Raw configuration bits.
  * @return       RP_OK - successful, RP_E* - failure
  */
@@ -646,6 +648,36 @@ int rp_BNetSetConfig(uint32_t config);
  * @return       RP_OK - successful, RP_E* - failure
  */
 int rp_BNetGetConfig(uint32_t* config);
+
+/**
+ * Enables or disables static weight reuse in the serial BNET engine.
+ * When enabled, weights already loaded into FPGA RAM are reused on the next run.
+ * @param enable true to reuse preloaded weights, false to stream weights again.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetStaticWeightReuse(bool enable);
+
+/**
+ * Reads the static weight reuse enable bit.
+ * @param enable Returned static weight reuse state.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStaticWeightReuse(bool* enable);
+
+/**
+ * Enables or disables the static-weight frame pipeline.
+ * This selects the fixed-weight pipeline path when BNET input mode is DDR.
+ * @param enable true to use the static pipeline, false to use the serial engine.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetStaticPipeline(bool enable);
+
+/**
+ * Reads the static-weight frame pipeline enable bit.
+ * @param enable Returned static pipeline state.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetStaticPipeline(bool* enable);
 
 /**
  * Sets the BNET vector length register.
