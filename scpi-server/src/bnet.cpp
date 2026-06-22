@@ -203,6 +203,28 @@ scpi_result_t RP_BNetStaticPipelineQ(scpi_t* context) {
                               "Failed to get BNET static pipeline state");
 }
 
+scpi_result_t RP_BNetSingleDacOutput(scpi_t* context) {
+    scpi_bool_t enable = FALSE;
+    if (!SCPI_ParamBool(context, &enable, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET single-DAC output state.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetSetSingleDacOutput(enable);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to set BNET single-DAC output state", false);
+
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetSingleDacOutputQ(scpi_t* context) {
+    bool enable = false;
+    int result = rp_BNetGetSingleDacOutput(&enable);
+    return bnet_result_uint32(context, result, enable ? 1u : 0u,
+                              "Failed to get BNET single-DAC output state");
+}
+
 scpi_result_t RP_BNetVectorLength(scpi_t* context) {
     uint32_t samples = 0;
     if (!SCPI_ParamUInt32(context, &samples, true)) {
@@ -251,7 +273,7 @@ scpi_result_t RP_BNetErrorMaskQ(scpi_t* context) {
 scpi_result_t RP_BNetTimingQ(scpi_t* context) {
     uint32_t index = 0;
     uint32_t cycles = 0;
-    int result = parse_bnet_index(context, 0, 3, &index);
+    int result = parse_bnet_index(context, 0, 5, &index);
     if (result != RP_OK)
         return SCPI_RES_ERR;
 

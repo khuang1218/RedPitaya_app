@@ -27,6 +27,8 @@
 #define BNET_TIME_LOAD_OFFSET     0x54u
 #define BNET_TIME_COMPUTE_OFFSET  0x58u
 #define BNET_TIME_PLAYBACK_OFFSET 0x5Cu
+#define BNET_TIME_INPUT_LOAD_OFFSET 0x60u
+#define BNET_TIME_LATENCY_OFFSET    0x64u
 #define BNET_STREAM_BASE_OFFSET   0x100u
 #define BNET_STREAM_STRIDE        0x40u
 #define BNET_NUM_CH          8u
@@ -60,6 +62,7 @@
 #define BNET_CONFIG_INPUT_MODE_MASK     0x03u
 #define BNET_CONFIG_STATIC_WEIGHT_REUSE 0x10u
 #define BNET_CONFIG_STATIC_PIPELINE     0x20u
+#define BNET_CONFIG_SINGLE_DAC_OUTPUT   0x40u
 
 static volatile uint32_t* bnet_reg = NULL;
 
@@ -292,6 +295,14 @@ int rp_BNetGetStaticPipeline(bool* enable) {
     return bnet_GetConfigBit(BNET_CONFIG_STATIC_PIPELINE, enable);
 }
 
+int rp_BNetSetSingleDacOutput(bool enable) {
+    return bnet_SetConfigBit(BNET_CONFIG_SINGLE_DAC_OUTPUT, enable);
+}
+
+int rp_BNetGetSingleDacOutput(bool* enable) {
+    return bnet_GetConfigBit(BNET_CONFIG_SINGLE_DAC_OUTPUT, enable);
+}
+
 int rp_BNetSetVectorLength(uint32_t samples) {
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
@@ -378,18 +389,20 @@ int rp_BNetGetOutputData(uint32_t index, int32_t* value) {
 int rp_BNetGetTiming(uint32_t index, uint32_t* cycles) {
     if (cycles == NULL)
         return RP_UIA;
-    if (index > 3u)
+    if (index > 5u)
         return RP_EOOR;
 
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
         return ret;
 
-    const uint32_t offsets[4] = {
+    const uint32_t offsets[6] = {
         BNET_TIME_TOTAL_OFFSET,
         BNET_TIME_LOAD_OFFSET,
         BNET_TIME_COMPUTE_OFFSET,
-        BNET_TIME_PLAYBACK_OFFSET
+        BNET_TIME_PLAYBACK_OFFSET,
+        BNET_TIME_INPUT_LOAD_OFFSET,
+        BNET_TIME_LATENCY_OFFSET
     };
     *cycles = bnet_ReadReg(offsets[index]);
     return RP_OK;

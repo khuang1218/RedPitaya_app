@@ -636,7 +636,8 @@ int rp_BNetGetInputMode(uint32_t* mode);
  * CONFIG[1:0] selects input mode, CONFIG[2] enables auto ping/pong swap on done,
  * CONFIG[3] enables auto-restart after auto-swap, CONFIG[4] enables static
  * weight reuse in the serial engine, and CONFIG[5] enables the static-weight
- * frame pipeline in DDR mode.
+ * frame pipeline in DDR mode. CONFIG[6] serializes both BNET output lanes onto
+ * DAC output 1 and drives DAC output 2 to zero.
  * @param config Raw configuration bits.
  * @return       RP_OK - successful, RP_E* - failure
  */
@@ -678,6 +679,22 @@ int rp_BNetSetStaticPipeline(bool enable);
  * @return       RP_OK - successful, RP_E* - failure
  */
 int rp_BNetGetStaticPipeline(bool* enable);
+
+/**
+ * Enables or disables single-DAC BNET output serialization.
+ * When enabled, y0/y1 are emitted sequentially on DAC output 1 and DAC output 2
+ * is held at zero.
+ * @param enable true to serialize onto one DAC, false to use both DAC outputs.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetSingleDacOutput(bool enable);
+
+/**
+ * Reads the single-DAC BNET output enable bit.
+ * @param enable Returned single-DAC output state.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetSingleDacOutput(bool* enable);
 
 /**
  * Sets the BNET vector length register.
@@ -731,7 +748,8 @@ int rp_BNetGetOutputData(uint32_t index, int32_t* value);
 
 /**
  * Reads one BNET hardware timing counter from the last run.
- * Index 0=total start-to-done, 1=load, 2=compute, 3=playback period.
+ * Index 0=total start-to-done, 1=load/weight-load, 2=compute/input-load,
+ * 3=playback/output, 4=input-load, 5=latency.
  * Values are adc_clk cycles.
  * @param index  Timing counter index.
  * @param cycles Returned cycle count.

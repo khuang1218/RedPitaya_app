@@ -23,6 +23,8 @@ scpi_result_t RP_BNetStaticWeightReuse(scpi_t* context);
 scpi_result_t RP_BNetStaticWeightReuseQ(scpi_t* context);
 scpi_result_t RP_BNetStaticPipeline(scpi_t* context);
 scpi_result_t RP_BNetStaticPipelineQ(scpi_t* context);
+scpi_result_t RP_BNetSingleDacOutput(scpi_t* context);
+scpi_result_t RP_BNetSingleDacOutputQ(scpi_t* context);
 scpi_result_t RP_BNetVectorLength(scpi_t* context);
 scpi_result_t RP_BNetVectorLengthQ(scpi_t* context);
 scpi_result_t RP_BNetStreamCountQ(scpi_t* context);

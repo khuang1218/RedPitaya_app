@@ -24,6 +24,8 @@ int rp_BNetSetStaticWeightReuse(bool enable);
 int rp_BNetGetStaticWeightReuse(bool* enable);
 int rp_BNetSetStaticPipeline(bool enable);
 int rp_BNetGetStaticPipeline(bool* enable);
+int rp_BNetSetSingleDacOutput(bool enable);
+int rp_BNetGetSingleDacOutput(bool* enable);
 int rp_BNetSetVectorLength(uint32_t samples);
 int rp_BNetGetVectorLength(uint32_t* samples);
 int rp_BNetGetStreamCount(uint32_t* count);

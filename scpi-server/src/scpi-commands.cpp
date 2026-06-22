@@ -249,6 +249,8 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("BNET:WEIGHT:REUSE?", RP_BNetStaticWeightReuseQ),
     SCPI_CMD("BNET:PIPELINE", RP_BNetStaticPipeline),
     SCPI_CMD("BNET:PIPELINE?", RP_BNetStaticPipelineQ),
+    SCPI_CMD("BNET:DAC:SINGLE", RP_BNetSingleDacOutput),
+    SCPI_CMD("BNET:DAC:SINGLE?", RP_BNetSingleDacOutputQ),
     SCPI_CMD("BNET:VLEN", RP_BNetVectorLength),
     SCPI_CMD("BNET:VLEN?", RP_BNetVectorLengthQ),
     SCPI_CMD("BNET:STREAM:COUNT?", RP_BNetStreamCountQ),
