@@ -296,12 +296,12 @@ scpi_result_t RP_BNetCaptureStatusQ(scpi_t* context) {
 scpi_result_t RP_BNetCaptureDataQ(scpi_t* context) {
     uint32_t index = 0;
     int32_t value = 0;
-    if (!SCPI_ParamUInt32(context, &index, true)) {
-        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET capture sample index.");
-        return SCPI_RES_ERR;
-    }
 
-    int result = rp_BNetGetCaptureData(index, &value);
+    int result = parse_bnet_index(context, 0, 65535, &index);
+    if (result != RP_OK)
+        return SCPI_RES_ERR;
+
+    result = rp_BNetGetCaptureData(index, &value);
     if (result != RP_OK)
         return bnet_return_error(context, result, "Failed to get BNET capture sample", true);
 

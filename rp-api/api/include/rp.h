@@ -758,6 +758,29 @@ int rp_BNetGetOutputData(uint32_t index, int32_t* value);
 int rp_BNetGetTiming(uint32_t index, uint32_t* cycles);
 
 /**
+ * Gets the number of digital BNET output samples captured from the last run.
+ * @param count Returned captured sample count.
+ * @return      RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetCaptureCount(uint32_t* count);
+
+/**
+ * Gets the digital BNET output capture status register.
+ * Bit 0 indicates capture overflow/truncation.
+ * @param status Returned capture status flags.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetCaptureStatus(uint32_t* status);
+
+/**
+ * Reads one digital BNET output capture sample.
+ * @param index Captured sample index.
+ * @param value Returned signed 32-bit sample value.
+ * @return      RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetCaptureData(uint32_t index, int32_t* value);
+
+/**
  * Sets one BNET stream ping/pong base address.
  * @param stream  Stream index.
  * @param buffer  Buffer index, 0=BASE0/ping, 1=BASE1/pong.
