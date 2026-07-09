@@ -260,6 +260,7 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("BNET:TIME#?", RP_BNetTimingQ),
     SCPI_CMD("BNET:CAPTURE:COUNT?", RP_BNetCaptureCountQ),
     SCPI_CMD("BNET:CAPTURE:STATUS?", RP_BNetCaptureStatusQ),
+    SCPI_CMD("BNET:CAPTURE#:DATA?", RP_BNetCaptureDataQ),
     SCPI_CMD("BNET:CAPTURE:DATA#?", RP_BNetCaptureDataQ),
     SCPI_CMD("BNET:STREAM#:BASE#", RP_BNetStreamBase),
     SCPI_CMD("BNET:STREAM#:BASE#?", RP_BNetStreamBaseQ),
