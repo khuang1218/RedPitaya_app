@@ -281,6 +281,35 @@ scpi_result_t RP_BNetTimingQ(scpi_t* context) {
     return bnet_result_uint32(context, result, cycles, "Failed to get BNET timing counter");
 }
 
+scpi_result_t RP_BNetCaptureCountQ(scpi_t* context) {
+    uint32_t count = 0;
+    int result = rp_BNetGetCaptureCount(&count);
+    return bnet_result_uint32(context, result, count, "Failed to get BNET capture count");
+}
+
+scpi_result_t RP_BNetCaptureStatusQ(scpi_t* context) {
+    uint32_t status = 0;
+    int result = rp_BNetGetCaptureStatus(&status);
+    return bnet_result_uint32(context, result, status, "Failed to get BNET capture status");
+}
+
+scpi_result_t RP_BNetCaptureDataQ(scpi_t* context) {
+    uint32_t index = 0;
+    int32_t value = 0;
+    if (!SCPI_ParamUInt32(context, &index, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET capture sample index.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetGetCaptureData(index, &value);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to get BNET capture sample", true);
+
+    SCPI_ResultInt32(context, value);
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
 scpi_result_t RP_BNetStreamBase(scpi_t* context) {
     uint32_t stream = 0;
     uint32_t buffer = 0;

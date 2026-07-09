@@ -29,6 +29,10 @@
 #define BNET_TIME_PLAYBACK_OFFSET 0x5Cu
 #define BNET_TIME_INPUT_LOAD_OFFSET 0x60u
 #define BNET_TIME_LATENCY_OFFSET    0x64u
+#define BNET_CAPTURE_COUNT_OFFSET   0x68u
+#define BNET_CAPTURE_ADDR_OFFSET    0x6Cu
+#define BNET_CAPTURE_DATA_OFFSET    0x70u
+#define BNET_CAPTURE_STATUS_OFFSET  0x74u
 #define BNET_STREAM_BASE_OFFSET   0x100u
 #define BNET_STREAM_STRIDE        0x40u
 #define BNET_NUM_CH          8u
@@ -405,6 +409,48 @@ int rp_BNetGetTiming(uint32_t index, uint32_t* cycles) {
         BNET_TIME_LATENCY_OFFSET
     };
     *cycles = bnet_ReadReg(offsets[index]);
+    return RP_OK;
+}
+
+int rp_BNetGetCaptureCount(uint32_t* count) {
+    if (count == NULL)
+        return RP_UIA;
+
+    int ret = bnet_CheckMap();
+    if (ret != RP_OK)
+        return ret;
+
+    *count = bnet_ReadReg(BNET_CAPTURE_COUNT_OFFSET);
+    return RP_OK;
+}
+
+int rp_BNetGetCaptureStatus(uint32_t* status) {
+    if (status == NULL)
+        return RP_UIA;
+
+    int ret = bnet_CheckMap();
+    if (ret != RP_OK)
+        return ret;
+
+    *status = bnet_ReadReg(BNET_CAPTURE_STATUS_OFFSET);
+    return RP_OK;
+}
+
+int rp_BNetGetCaptureData(uint32_t index, int32_t* value) {
+    if (value == NULL)
+        return RP_UIA;
+
+    int ret = bnet_CheckMap();
+    if (ret != RP_OK)
+        return ret;
+
+    uint32_t count = bnet_ReadReg(BNET_CAPTURE_COUNT_OFFSET);
+    if (index >= count)
+        return RP_EOOR;
+
+    bnet_WriteReg(BNET_CAPTURE_ADDR_OFFSET, index);
+    (void)bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
+    *value = (int32_t)bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
     return RP_OK;
 }
 
