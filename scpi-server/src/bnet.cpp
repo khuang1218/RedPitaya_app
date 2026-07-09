@@ -296,12 +296,28 @@ scpi_result_t RP_BNetCaptureStatusQ(scpi_t* context) {
 scpi_result_t RP_BNetCaptureDataQ(scpi_t* context) {
     uint32_t index = 0;
     int32_t value = 0;
+    int32_t cmd[1] = {-1};
 
-    int result = parse_bnet_index(context, 0, 65535, &index);
-    if (result != RP_OK)
+    if (SCPI_CommandNumbers(context, cmd, 1, -1) && cmd[0] >= 0) {
+        if (cmd[0] > 65535) {
+            SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "BNET capture index out of range.");
+            requestSendNewLine(context);
+            return SCPI_RES_ERR;
+        }
+        index = (uint32_t)cmd[0];
+    } else if (!SCPI_ParamUInt32(context, &index, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET capture sample index.");
+        requestSendNewLine(context);
         return SCPI_RES_ERR;
+    }
 
-    result = rp_BNetGetCaptureData(index, &value);
+    if (index > 65535) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "BNET capture index out of range.");
+        requestSendNewLine(context);
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetGetCaptureData(index, &value);
     if (result != RP_OK)
         return bnet_return_error(context, result, "Failed to get BNET capture sample", true);
 
