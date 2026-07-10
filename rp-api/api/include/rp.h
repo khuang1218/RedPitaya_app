@@ -781,6 +781,15 @@ int rp_BNetGetCaptureStatus(uint32_t* status);
 int rp_BNetGetCaptureData(uint32_t index, int32_t* value);
 
 /**
+ * Reads a contiguous block of digital BNET output capture samples.
+ * @param start   First captured sample index.
+ * @param samples Number of samples to read.
+ * @param values  Returned signed 16-bit sample buffer.
+ * @return        RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetCaptureDataBlock(uint32_t start, uint32_t samples, int16_t* values);
+
+/**
  * Sets one BNET stream ping/pong base address.
  * @param stream  Stream index.
  * @param buffer  Buffer index, 0=BASE0/ping, 1=BASE1/pong.

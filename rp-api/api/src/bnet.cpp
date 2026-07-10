@@ -454,6 +454,27 @@ int rp_BNetGetCaptureData(uint32_t index, int32_t* value) {
     return RP_OK;
 }
 
+int rp_BNetGetCaptureDataBlock(uint32_t start, uint32_t samples, int16_t* values) {
+    if (samples > 0 && values == NULL)
+        return RP_UIA;
+
+    int ret = bnet_CheckMap();
+    if (ret != RP_OK)
+        return ret;
+
+    uint32_t count = bnet_ReadReg(BNET_CAPTURE_COUNT_OFFSET);
+    if (start > count || samples > (count - start))
+        return RP_EOOR;
+
+    for (uint32_t i = 0; i < samples; i++) {
+        bnet_WriteReg(BNET_CAPTURE_ADDR_OFFSET, start + i);
+        (void)bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
+        values[i] = (int16_t)bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
+    }
+
+    return RP_OK;
+}
+
 int rp_BNetSetStreamBase(uint32_t stream, uint32_t buffer, uint32_t address) {
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)

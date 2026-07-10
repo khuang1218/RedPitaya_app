@@ -35,6 +35,7 @@ scpi_result_t RP_BNetTimingQ(scpi_t* context);
 scpi_result_t RP_BNetCaptureCountQ(scpi_t* context);
 scpi_result_t RP_BNetCaptureStatusQ(scpi_t* context);
 scpi_result_t RP_BNetCaptureDataQ(scpi_t* context);
+scpi_result_t RP_BNetCaptureDataBlockQ(scpi_t* context);
 scpi_result_t RP_BNetStreamBase(scpi_t* context);
 scpi_result_t RP_BNetStreamBaseQ(scpi_t* context);
 scpi_result_t RP_BNetStreamLength(scpi_t* context);

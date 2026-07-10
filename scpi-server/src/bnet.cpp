@@ -8,6 +8,7 @@
 #include "scpi-parser-ext.h"
 
 #include <stdlib.h>
+#include <vector>
 
 static const scpi_choice_def_t scpi_BNetMode[] = {{"ASG", 0}, {"ADC", 1}, {"DDR", 2}, SCPI_CHOICE_LIST_END};
 
@@ -322,6 +323,37 @@ scpi_result_t RP_BNetCaptureDataQ(scpi_t* context) {
         return bnet_return_error(context, result, "Failed to get BNET capture sample", true);
 
     SCPI_ResultInt32(context, value);
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetCaptureDataBlockQ(scpi_t* context) {
+    uint32_t start = 0;
+    uint32_t samples = 0;
+
+    if (!SCPI_ParamUInt32(context, &start, true) ||
+        !SCPI_ParamUInt32(context, &samples, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET capture start/count.");
+        requestSendNewLine(context);
+        return SCPI_RES_ERR;
+    }
+
+    if (samples > 65536) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "BNET capture block is too large.");
+        requestSendNewLine(context);
+        return SCPI_RES_ERR;
+    }
+
+    std::vector<int16_t> values(samples);
+    int result = rp_BNetGetCaptureDataBlock(start, samples, values.data());
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to get BNET capture block", true);
+
+    bool error = false;
+    SCPI_ResultBufferInt16(context, values.data(), values.size(), &error);
+    if (error)
+        return SCPI_RES_ERR;
+
     RP_LOG_INFO("%s", rp_GetError(result))
     return SCPI_RES_OK;
 }

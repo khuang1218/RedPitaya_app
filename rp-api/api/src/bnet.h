@@ -37,6 +37,7 @@ int rp_BNetGetTiming(uint32_t index, uint32_t* cycles);
 int rp_BNetGetCaptureCount(uint32_t* count);
 int rp_BNetGetCaptureStatus(uint32_t* status);
 int rp_BNetGetCaptureData(uint32_t index, int32_t* value);
+int rp_BNetGetCaptureDataBlock(uint32_t start, uint32_t samples, int16_t* values);
 int rp_BNetSetStreamBase(uint32_t stream, uint32_t buffer, uint32_t address);
 int rp_BNetGetStreamBase(uint32_t stream, uint32_t buffer, uint32_t* address);
 int rp_BNetSetStreamLength(uint32_t stream, uint32_t bytes);
