@@ -734,8 +734,8 @@ int rp_BNetSetCombineAdcInput(bool enable);
 int rp_BNetGetCombineAdcInput(bool* enable);
 
 /**
- * Sets the BNET vector length register.
- * @param samples Vector length in samples.
+ * Sets the runtime static-SDF vector length.
+ * @param samples Supported values are 1024, 2048, and 4096.
  * @return        RP_OK - successful, RP_E* - failure
  */
 int rp_BNetSetVectorLength(uint32_t samples);
@@ -746,6 +746,21 @@ int rp_BNetSetVectorLength(uint32_t samples);
  * @return        RP_OK - successful, RP_E* - failure
  */
 int rp_BNetGetVectorLength(uint32_t* samples);
+
+/**
+ * Selects the static-weight bank for the next 1024- or 2048-point run.
+ * A selection arms one run and must be repeated before every subsequent run.
+ * Bank selection is unsupported for 4096-point mode, which always uses bank 0.
+ * @param bank 0..3 for 1024 points or 0..1 for 2048 points.
+ * @return RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetWeightBank(uint32_t bank);
+
+/** Reads the currently selected static-weight bank number. */
+int rp_BNetGetWeightBank(uint32_t* bank);
+
+/** Returns the number of resident banks for the selected vector length. */
+int rp_BNetGetWeightBankCount(uint32_t* count);
 
 /**
  * Gets the number of logical BNET DDR streams exposed by hardware.

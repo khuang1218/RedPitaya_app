@@ -1,3 +1,9 @@
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/kairan/vscodeprj/fpgaprj/RedPitaya-FPGA/prj/v0.94/rtl/butterfly_network.sv" into library work
+INFO: [VRFC 10-311] analyzing module butterfly_network
+INFO: [VRFC 10-311] analyzing module bnet_tdp_ram
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/kairan/vscodeprj/fpgaprj/RedPitaya-FPGA/prj/v0.94/rtl/butterfly_network_static_sdf.sv" into library work
+INFO: [VRFC 10-311] analyzing module butterfly_network_static_sdf
+INFO: [VRFC 10-311] analyzing module butterfly_static_sdf_stage
 INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/kairan/vscodeprj/fpgaprj/RedPitaya-FPGA/prj/v0.94/rtl/bnet_regs.sv" into library work
 INFO: [VRFC 10-311] analyzing module bnet_regs
 INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/kairan/vscodeprj/fpgaprj/RedPitaya-FPGA/prj/v0.94/rtl/red_pitaya_top_LED7_mod.sv" into library work

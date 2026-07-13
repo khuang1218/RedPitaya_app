@@ -315,6 +315,33 @@ scpi_result_t RP_BNetErrorMaskQ(scpi_t* context) {
     return bnet_result_uint32(context, result, mask, "Failed to get BNET error stream mask");
 }
 
+scpi_result_t RP_BNetWeightBank(scpi_t* context) {
+    uint32_t bank = 0;
+    if (!SCPI_ParamUInt32(context, &bank, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET weight-bank index.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetSetWeightBank(bank);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to select BNET weight bank", false);
+
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetWeightBankQ(scpi_t* context) {
+    uint32_t bank = 0;
+    int result = rp_BNetGetWeightBank(&bank);
+    return bnet_result_uint32(context, result, bank, "Failed to get BNET weight bank");
+}
+
+scpi_result_t RP_BNetWeightBankCountQ(scpi_t* context) {
+    uint32_t count = 0;
+    int result = rp_BNetGetWeightBankCount(&count);
+    return bnet_result_uint32(context, result, count, "Failed to get BNET weight-bank count");
+}
+
 scpi_result_t RP_BNetTimingQ(scpi_t* context) {
     uint32_t index = 0;
     uint32_t cycles = 0;
