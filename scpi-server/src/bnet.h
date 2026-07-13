@@ -29,6 +29,8 @@ scpi_result_t RP_BNetSplitDacOutput(scpi_t* context);
 scpi_result_t RP_BNetSplitDacOutputQ(scpi_t* context);
 scpi_result_t RP_BNetCombineAdcInput(scpi_t* context);
 scpi_result_t RP_BNetCombineAdcInputQ(scpi_t* context);
+scpi_result_t RP_BNetCombineAdcPhase(scpi_t* context);
+scpi_result_t RP_BNetCombineAdcPhaseQ(scpi_t* context);
 scpi_result_t RP_BNetVectorLength(scpi_t* context);
 scpi_result_t RP_BNetVectorLengthQ(scpi_t* context);
 scpi_result_t RP_BNetWeightBank(scpi_t* context);

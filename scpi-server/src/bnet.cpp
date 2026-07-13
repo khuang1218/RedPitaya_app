@@ -270,6 +270,28 @@ scpi_result_t RP_BNetCombineAdcInputQ(scpi_t* context) {
                               "Failed to get IN1 acquisition bit-combine state");
 }
 
+scpi_result_t RP_BNetCombineAdcPhase(scpi_t* context) {
+    scpi_bool_t phase = FALSE;
+    if (!SCPI_ParamBool(context, &phase, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing IN1 bit-combine phase.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetSetCombineAdcPhase(phase);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to set IN1 bit-combine phase", false);
+
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetCombineAdcPhaseQ(scpi_t* context) {
+    bool phase = false;
+    int result = rp_BNetGetCombineAdcPhase(&phase);
+    return bnet_result_uint32(context, result, phase ? 1u : 0u,
+                              "Failed to get IN1 bit-combine phase");
+}
+
 scpi_result_t RP_BNetVectorLength(scpi_t* context) {
     uint32_t samples = 0;
     if (!SCPI_ParamUInt32(context, &samples, true)) {

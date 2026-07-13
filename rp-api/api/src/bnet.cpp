@@ -34,6 +34,7 @@
 #define BNET_CAPTURE_DATA_OFFSET    0x70u
 #define BNET_CAPTURE_STATUS_OFFSET  0x74u
 #define BNET_WEIGHT_BANK_OFFSET     0x78u
+#define BNET_REGISTER_SETTLE_READS  16u
 #define BNET_CAPTURE_READ_SETTLE_READS 16u
 #define BNET_STREAM_BASE_OFFSET   0x100u
 #define BNET_STREAM_STRIDE        0x40u
@@ -71,6 +72,7 @@
 #define BNET_CONFIG_SINGLE_DAC_OUTPUT   0x40u
 #define BNET_CONFIG_SPLIT_DAC_OUTPUT    0x80u
 #define BNET_CONFIG_COMBINE_ADC_INPUT   0x100u
+#define BNET_CONFIG_COMBINE_ADC_PHASE   0x200u
 #define BNET_WEIGHT_BANK_SELECTED       0x80000000u
 
 static volatile uint32_t* bnet_reg = NULL;
@@ -89,6 +91,13 @@ static inline void bnet_WriteReg(uint32_t offset, uint32_t value) {
 
 static inline uint32_t bnet_ReadReg(uint32_t offset) {
     return bnet_reg[offset / sizeof(uint32_t)];
+}
+
+static uint32_t bnet_ReadRegSettled(uint32_t offset) {
+    uint32_t value = 0;
+    for (uint32_t i = 0; i < BNET_REGISTER_SETTLE_READS; ++i)
+        value = bnet_ReadReg(offset);
+    return value;
 }
 
 static int16_t bnet_ReadCaptureSample(uint32_t index) {
@@ -116,13 +125,14 @@ static int bnet_SetConfigBit(uint32_t mask, bool enable) {
     if (ret != RP_OK)
         return ret;
 
-    uint32_t config = bnet_ReadReg(BNET_CONFIG_OFFSET);
+    uint32_t config = bnet_ReadRegSettled(BNET_CONFIG_OFFSET);
     if (enable)
         config |= mask;
     else
         config &= ~mask;
     bnet_WriteReg(BNET_CONFIG_OFFSET, config);
-    return RP_OK;
+    return (bnet_ReadRegSettled(BNET_CONFIG_OFFSET) & mask) ==
+                   (enable ? mask : 0u) ? RP_OK : RP_EOP;
 }
 
 static int bnet_GetConfigBit(uint32_t mask, bool* enable) {
@@ -133,7 +143,7 @@ static int bnet_GetConfigBit(uint32_t mask, bool* enable) {
     if (ret != RP_OK)
         return ret;
 
-    *enable = (bnet_ReadReg(BNET_CONFIG_OFFSET) & mask) != 0;
+    *enable = (bnet_ReadRegSettled(BNET_CONFIG_OFFSET) & mask) != 0;
     return RP_OK;
 }
 
@@ -217,8 +227,8 @@ int rp_BNetStart() {
     if (ret != RP_OK)
         return ret;
 
-    uint32_t vector_len = bnet_ReadReg(BNET_VECTOR_LEN_OFFSET);
-    uint32_t bank_status = bnet_ReadReg(BNET_WEIGHT_BANK_OFFSET);
+    uint32_t vector_len = bnet_ReadRegSettled(BNET_VECTOR_LEN_OFFSET);
+    uint32_t bank_status = bnet_ReadRegSettled(BNET_WEIGHT_BANK_OFFSET);
     if (vector_len != 4096u && (bank_status & BNET_WEIGHT_BANK_SELECTED) == 0)
         return RP_EIPV;
 
@@ -347,6 +357,14 @@ int rp_BNetGetCombineAdcInput(bool* enable) {
     return bnet_GetConfigBit(BNET_CONFIG_COMBINE_ADC_INPUT, enable);
 }
 
+int rp_BNetSetCombineAdcPhase(bool phase) {
+    return bnet_SetConfigBit(BNET_CONFIG_COMBINE_ADC_PHASE, phase);
+}
+
+int rp_BNetGetCombineAdcPhase(bool* phase) {
+    return bnet_GetConfigBit(BNET_CONFIG_COMBINE_ADC_PHASE, phase);
+}
+
 int rp_BNetSetVectorLength(uint32_t samples) {
     if (samples != 1024u && samples != 2048u && samples != 4096u)
         return RP_EOOR;
@@ -356,6 +374,8 @@ int rp_BNetSetVectorLength(uint32_t samples) {
         return ret;
 
     bnet_WriteReg(BNET_VECTOR_LEN_OFFSET, samples);
+    if (bnet_ReadRegSettled(BNET_VECTOR_LEN_OFFSET) != samples)
+        return RP_EOP;
     return RP_OK;
 }
 
@@ -367,7 +387,7 @@ int rp_BNetGetVectorLength(uint32_t* samples) {
     if (ret != RP_OK)
         return ret;
 
-    *samples = bnet_ReadReg(BNET_VECTOR_LEN_OFFSET);
+    *samples = bnet_ReadRegSettled(BNET_VECTOR_LEN_OFFSET);
     return RP_OK;
 }
 
@@ -438,7 +458,7 @@ int rp_BNetSetWeightBank(uint32_t bank) {
     if (ret != RP_OK)
         return ret;
 
-    uint32_t vector_len = bnet_ReadReg(BNET_VECTOR_LEN_OFFSET);
+    uint32_t vector_len = bnet_ReadRegSettled(BNET_VECTOR_LEN_OFFSET);
     if (vector_len == 4096u)
         return RP_EUF;
     if ((vector_len == 2048u && bank >= 2u) ||
@@ -448,6 +468,10 @@ int rp_BNetSetWeightBank(uint32_t bank) {
         return RP_EIPV;
 
     bnet_WriteReg(BNET_WEIGHT_BANK_OFFSET, bank);
+    uint32_t bank_status = bnet_ReadRegSettled(BNET_WEIGHT_BANK_OFFSET);
+    if ((bank_status & BNET_WEIGHT_BANK_SELECTED) == 0 ||
+        (bank_status & 0x3u) != bank)
+        return RP_EOP;
     return RP_OK;
 }
 
@@ -459,7 +483,7 @@ int rp_BNetGetWeightBank(uint32_t* bank) {
     if (ret != RP_OK)
         return ret;
 
-    *bank = bnet_ReadReg(BNET_WEIGHT_BANK_OFFSET) & 0x3u;
+    *bank = bnet_ReadRegSettled(BNET_WEIGHT_BANK_OFFSET) & 0x3u;
     return RP_OK;
 }
 
@@ -471,7 +495,7 @@ int rp_BNetGetWeightBankCount(uint32_t* count) {
     if (ret != RP_OK)
         return ret;
 
-    switch (bnet_ReadReg(BNET_VECTOR_LEN_OFFSET)) {
+    switch (bnet_ReadRegSettled(BNET_VECTOR_LEN_OFFSET)) {
         case 1024u: *count = 4u; return RP_OK;
         case 2048u: *count = 2u; return RP_OK;
         case 4096u: *count = 1u; return RP_OK;

@@ -208,6 +208,8 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("ACQ:SOUR#:DATA:LATest:N?", RP_AcqLatestDataQ),
     SCPI_CMD("ACQ:SOUR#:DATA:TRig?", RP_AcqTriggerDataQ),
     SCPI_CMD("ACQ:BUF:SIZE?", RP_AcqBufferSizeQ),
+    SCPI_CMD("ACQ:BIT:COMBINE:PHASE", RP_BNetCombineAdcPhase),
+    SCPI_CMD("ACQ:BIT:COMBINE:PHASE?", RP_BNetCombineAdcPhaseQ),
     SCPI_CMD("ACQ:BIT:COMBINE", RP_BNetCombineAdcInput),
     SCPI_CMD("ACQ:BIT:COMBINE?", RP_BNetCombineAdcInputQ),
 
@@ -256,6 +258,8 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("BNET:DAC:SPLIT", RP_BNetSplitDacOutput),
     SCPI_CMD("BNET:DAC:SPLIT?", RP_BNetSplitDacOutputQ),
     /* Compatibility aliases for the original command spelling. */
+    SCPI_CMD("BNET:ADC:COMBINE:PHASE", RP_BNetCombineAdcPhase),
+    SCPI_CMD("BNET:ADC:COMBINE:PHASE?", RP_BNetCombineAdcPhaseQ),
     SCPI_CMD("BNET:ADC:COMBINE", RP_BNetCombineAdcInput),
     SCPI_CMD("BNET:ADC:COMBINE?", RP_BNetCombineAdcInputQ),
     SCPI_CMD("BNET:VLEN", RP_BNetVectorLength),

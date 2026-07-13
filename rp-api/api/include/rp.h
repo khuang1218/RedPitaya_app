@@ -638,9 +638,10 @@ int rp_BNetGetInputMode(uint32_t* mode);
  * weight reuse in the serial engine, and CONFIG[5] enables the static-weight
  * frame pipeline in DDR mode. CONFIG[6] serializes both BNET output lanes onto
  * DAC output 1 and drives DAC output 2 to zero. CONFIG[7] splits every raw
- * 14-bit BNET result into bits[13:7] and bits[6:0] samples aligned to DAC[13:7].
- * CONFIG[8] combines neighboring IN1 ADC[13:7] fields into one 14-bit scope
- * acquisition word. It does not alter the BNET compute input.
+ * 14-bit BNET result into bits[13:7] and bits[6:0] using centered offset-binary
+ * DAC transport. CONFIG[8] combines neighboring IN1 fields into one 14-bit
+ * scope acquisition word. CONFIG[9] selects the neighboring-sample pair phase.
+ * These settings do not alter the BNET compute input.
  * @param config Raw configuration bits.
  * @return       RP_OK - successful, RP_E* - failure
  */
@@ -702,7 +703,8 @@ int rp_BNetGetSingleDacOutput(bool* enable);
 /**
  * Enables or disables raw 14-to-7-bit BNET DAC output splitting.
  * When enabled, each 14-bit result is emitted on DAC output 1 as two samples:
- * bits[13:7] then bits[6:0], each placed in DAC[13:7] with DAC[6:0] zero.
+ * bits[13:7] then bits[6:0]. Each unsigned field uses centered offset-binary
+ * DAC transport so values 0..127 map monotonically across the signed range.
  * @param enable true to split each result, false to emit normal 14-bit results.
  * @return       RP_OK - successful, RP_E* - failure
  */
@@ -732,6 +734,23 @@ int rp_BNetSetCombineAdcInput(bool enable);
  * @return       RP_OK - successful, RP_E* - failure
  */
 int rp_BNetGetCombineAdcInput(bool* enable);
+
+/**
+ * Selects which neighboring IN1 sample starts a reconstructed 14-bit word.
+ * Phase 0 combines samples (0,1), (2,3), ...; phase 1 combines samples
+ * (1,2), (3,4), ... after each BNET start/reset. Use this to compensate an
+ * odd number of DAC, cable, and ADC pipeline clocks.
+ * @param phase false for phase 0, true for phase 1.
+ * @return      RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetCombineAdcPhase(bool phase);
+
+/**
+ * Reads the neighboring-sample phase used by the IN1 bit combiner.
+ * @param phase Returned phase selection.
+ * @return      RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetCombineAdcPhase(bool* phase);
 
 /**
  * Sets the runtime static-SDF vector length.
