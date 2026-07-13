@@ -226,6 +226,50 @@ scpi_result_t RP_BNetSingleDacOutputQ(scpi_t* context) {
                               "Failed to get BNET single-DAC output state");
 }
 
+scpi_result_t RP_BNetSplitDacOutput(scpi_t* context) {
+    scpi_bool_t enable = FALSE;
+    if (!SCPI_ParamBool(context, &enable, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing BNET split-DAC output state.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetSetSplitDacOutput(enable);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to set BNET split-DAC output state", false);
+
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetSplitDacOutputQ(scpi_t* context) {
+    bool enable = false;
+    int result = rp_BNetGetSplitDacOutput(&enable);
+    return bnet_result_uint32(context, result, enable ? 1u : 0u,
+                              "Failed to get BNET split-DAC output state");
+}
+
+scpi_result_t RP_BNetCombineAdcInput(scpi_t* context) {
+    scpi_bool_t enable = FALSE;
+    if (!SCPI_ParamBool(context, &enable, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing IN1 acquisition bit-combine state.");
+        return SCPI_RES_ERR;
+    }
+
+    int result = rp_BNetSetCombineAdcInput(enable);
+    if (result != RP_OK)
+        return bnet_return_error(context, result, "Failed to set IN1 acquisition bit-combine state", false);
+
+    RP_LOG_INFO("%s", rp_GetError(result))
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_BNetCombineAdcInputQ(scpi_t* context) {
+    bool enable = false;
+    int result = rp_BNetGetCombineAdcInput(&enable);
+    return bnet_result_uint32(context, result, enable ? 1u : 0u,
+                              "Failed to get IN1 acquisition bit-combine state");
+}
+
 scpi_result_t RP_BNetVectorLength(scpi_t* context) {
     uint32_t samples = 0;
     if (!SCPI_ParamUInt32(context, &samples, true)) {

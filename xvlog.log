@@ -1,0 +1,4 @@
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/kairan/vscodeprj/fpgaprj/RedPitaya-FPGA/prj/v0.94/rtl/bnet_regs.sv" into library work
+INFO: [VRFC 10-311] analyzing module bnet_regs
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/kairan/vscodeprj/fpgaprj/RedPitaya-FPGA/prj/v0.94/rtl/red_pitaya_top_LED7_mod.sv" into library work
+INFO: [VRFC 10-311] analyzing module red_pitaya_top

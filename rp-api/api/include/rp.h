@@ -637,7 +637,10 @@ int rp_BNetGetInputMode(uint32_t* mode);
  * CONFIG[3] enables auto-restart after auto-swap, CONFIG[4] enables static
  * weight reuse in the serial engine, and CONFIG[5] enables the static-weight
  * frame pipeline in DDR mode. CONFIG[6] serializes both BNET output lanes onto
- * DAC output 1 and drives DAC output 2 to zero.
+ * DAC output 1 and drives DAC output 2 to zero. CONFIG[7] splits every raw
+ * 14-bit BNET result into bits[13:7] and bits[6:0] samples aligned to DAC[13:7].
+ * CONFIG[8] combines neighboring IN1 ADC[13:7] fields into one 14-bit scope
+ * acquisition word. It does not alter the BNET compute input.
  * @param config Raw configuration bits.
  * @return       RP_OK - successful, RP_E* - failure
  */
@@ -695,6 +698,40 @@ int rp_BNetSetSingleDacOutput(bool enable);
  * @return       RP_OK - successful, RP_E* - failure
  */
 int rp_BNetGetSingleDacOutput(bool* enable);
+
+/**
+ * Enables or disables raw 14-to-7-bit BNET DAC output splitting.
+ * When enabled, each 14-bit result is emitted on DAC output 1 as two samples:
+ * bits[13:7] then bits[6:0], each placed in DAC[13:7] with DAC[6:0] zero.
+ * @param enable true to split each result, false to emit normal 14-bit results.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetSplitDacOutput(bool enable);
+
+/**
+ * Reads the raw 14-to-7-bit BNET DAC output splitting state.
+ * @param enable Returned split-output state.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetSplitDacOutput(bool* enable);
+
+/**
+ * Enables or disables bit-combined IN1 scope acquisition.
+ * The first ADC[13:7] field becomes result[13:7] and the second ADC[13:7]
+ * field becomes result[6:0]. The result is held for two ADC clocks; configure
+ * acquisition decimation 2 to receive one reconstructed word per RF pair.
+ * This setting does not alter the BNET compute input, and IN2 remains raw.
+ * @param enable true for combined IN1 acquisition, false for normal acquisition.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetSetCombineAdcInput(bool enable);
+
+/**
+ * Reads the bit-combined IN1 acquisition state.
+ * @param enable Returned ADC-combine state.
+ * @return       RP_OK - successful, RP_E* - failure
+ */
+int rp_BNetGetCombineAdcInput(bool* enable);
 
 /**
  * Sets the BNET vector length register.

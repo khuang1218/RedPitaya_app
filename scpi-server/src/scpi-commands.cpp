@@ -208,6 +208,8 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("ACQ:SOUR#:DATA:LATest:N?", RP_AcqLatestDataQ),
     SCPI_CMD("ACQ:SOUR#:DATA:TRig?", RP_AcqTriggerDataQ),
     SCPI_CMD("ACQ:BUF:SIZE?", RP_AcqBufferSizeQ),
+    SCPI_CMD("ACQ:BIT:COMBINE", RP_BNetCombineAdcInput),
+    SCPI_CMD("ACQ:BIT:COMBINE?", RP_BNetCombineAdcInputQ),
 
     // DMA mode for ACQ
     SCPI_CMD("ACQ:AXI:DATA:Units", RP_AcqAxiScpiDataUnits),
@@ -251,6 +253,11 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("BNET:PIPELINE?", RP_BNetStaticPipelineQ),
     SCPI_CMD("BNET:DAC:SINGLE", RP_BNetSingleDacOutput),
     SCPI_CMD("BNET:DAC:SINGLE?", RP_BNetSingleDacOutputQ),
+    SCPI_CMD("BNET:DAC:SPLIT", RP_BNetSplitDacOutput),
+    SCPI_CMD("BNET:DAC:SPLIT?", RP_BNetSplitDacOutputQ),
+    /* Compatibility aliases for the original command spelling. */
+    SCPI_CMD("BNET:ADC:COMBINE", RP_BNetCombineAdcInput),
+    SCPI_CMD("BNET:ADC:COMBINE?", RP_BNetCombineAdcInputQ),
     SCPI_CMD("BNET:VLEN", RP_BNetVectorLength),
     SCPI_CMD("BNET:VLEN?", RP_BNetVectorLengthQ),
     SCPI_CMD("BNET:STREAM:COUNT?", RP_BNetStreamCountQ),

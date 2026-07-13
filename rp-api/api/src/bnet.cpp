@@ -33,6 +33,7 @@
 #define BNET_CAPTURE_ADDR_OFFSET    0x6Cu
 #define BNET_CAPTURE_DATA_OFFSET    0x70u
 #define BNET_CAPTURE_STATUS_OFFSET  0x74u
+#define BNET_CAPTURE_READ_SETTLE_READS 16u
 #define BNET_STREAM_BASE_OFFSET   0x100u
 #define BNET_STREAM_STRIDE        0x40u
 #define BNET_NUM_CH          8u
@@ -67,6 +68,8 @@
 #define BNET_CONFIG_STATIC_WEIGHT_REUSE 0x10u
 #define BNET_CONFIG_STATIC_PIPELINE     0x20u
 #define BNET_CONFIG_SINGLE_DAC_OUTPUT   0x40u
+#define BNET_CONFIG_SPLIT_DAC_OUTPUT    0x80u
+#define BNET_CONFIG_COMBINE_ADC_INPUT   0x100u
 
 static volatile uint32_t* bnet_reg = NULL;
 
@@ -84,6 +87,20 @@ static inline void bnet_WriteReg(uint32_t offset, uint32_t value) {
 
 static inline uint32_t bnet_ReadReg(uint32_t offset) {
     return bnet_reg[offset / sizeof(uint32_t)];
+}
+
+static int16_t bnet_ReadCaptureSample(uint32_t index) {
+    bnet_WriteReg(BNET_CAPTURE_ADDR_OFFSET, index);
+
+    // CAPTURE_ADDR crosses the system-bus bridge before addressing a
+    // synchronous block RAM in the adc_clk domain. Keep the requested address
+    // stable while the read pipeline settles; otherwise sequential block reads
+    // can return samples from several addresses earlier.
+    (void)bnet_ReadReg(BNET_CAPTURE_ADDR_OFFSET);
+    uint32_t value = 0;
+    for (uint32_t i = 0; i < BNET_CAPTURE_READ_SETTLE_READS; ++i)
+        value = bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
+    return (int16_t)value;
 }
 
 static int bnet_CheckMap() {
@@ -307,6 +324,22 @@ int rp_BNetGetSingleDacOutput(bool* enable) {
     return bnet_GetConfigBit(BNET_CONFIG_SINGLE_DAC_OUTPUT, enable);
 }
 
+int rp_BNetSetSplitDacOutput(bool enable) {
+    return bnet_SetConfigBit(BNET_CONFIG_SPLIT_DAC_OUTPUT, enable);
+}
+
+int rp_BNetGetSplitDacOutput(bool* enable) {
+    return bnet_GetConfigBit(BNET_CONFIG_SPLIT_DAC_OUTPUT, enable);
+}
+
+int rp_BNetSetCombineAdcInput(bool enable) {
+    return bnet_SetConfigBit(BNET_CONFIG_COMBINE_ADC_INPUT, enable);
+}
+
+int rp_BNetGetCombineAdcInput(bool* enable) {
+    return bnet_GetConfigBit(BNET_CONFIG_COMBINE_ADC_INPUT, enable);
+}
+
 int rp_BNetSetVectorLength(uint32_t samples) {
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
@@ -448,9 +481,7 @@ int rp_BNetGetCaptureData(uint32_t index, int32_t* value) {
     if (index >= count)
         return RP_EOOR;
 
-    bnet_WriteReg(BNET_CAPTURE_ADDR_OFFSET, index);
-    (void)bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
-    *value = (int32_t)bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
+    *value = (int32_t)bnet_ReadCaptureSample(index);
     return RP_OK;
 }
 
@@ -467,9 +498,7 @@ int rp_BNetGetCaptureDataBlock(uint32_t start, uint32_t samples, int16_t* values
         return RP_EOOR;
 
     for (uint32_t i = 0; i < samples; i++) {
-        bnet_WriteReg(BNET_CAPTURE_ADDR_OFFSET, start + i);
-        (void)bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
-        values[i] = (int16_t)bnet_ReadReg(BNET_CAPTURE_DATA_OFFSET);
+        values[i] = bnet_ReadCaptureSample(start + i);
     }
 
     return RP_OK;
