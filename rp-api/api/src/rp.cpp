@@ -24,6 +24,7 @@
 #include "generate.h"
 #include "housekeeping.h"
 #include "oscilloscope.h"
+#include "tdc.h"
 #include "rp_hw_calib.h"
 
 #include "rp-i2c-max7311-c.h"
@@ -151,6 +152,7 @@ int rp_Release() {
     ECHECK_NO_RET(osc_Release())
     ECHECK_NO_RET(generate_Release())
     ECHECK_NO_RET(bnet_Release())
+    ECHECK_NO_RET(tdc_Release())
     ECHECK_NO_RET(ams_Release())
     ECHECK_NO_RET(hk_Release())
     ECHECK_NO_RET(daisy_Release())

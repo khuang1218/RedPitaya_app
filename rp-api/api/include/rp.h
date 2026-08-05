@@ -572,6 +572,120 @@ int rp_GetExternalTriggerLevel(float* value);
 
 ///@}
 
+/** @name LVDS carry-chain time-to-digital converter
+ */
+///@{
+
+typedef enum {
+    RP_TDC_MODE_SINGLE = 0,
+    RP_TDC_MODE_CONTINUOUS = 1,
+    RP_TDC_MODE_CALIBRATION = 2
+} rp_tdc_mode_t;
+
+/** Per-result status flags returned in rp_tdc_result_t::status. */
+#define RP_TDC_RESULT_VALID                (1u << 0)
+#define RP_TDC_RESULT_NO_TRANSITION        (1u << 1)
+#define RP_TDC_RESULT_MULTIPLE_TRANSITIONS (1u << 2)
+#define RP_TDC_RESULT_ALL_ZERO             (1u << 3)
+#define RP_TDC_RESULT_ALL_ONE              (1u << 4)
+#define RP_TDC_RESULT_BUBBLE_CORRECTED     (1u << 5)
+#define RP_TDC_RESULT_TIMEOUT              (1u << 6)
+#define RP_TDC_RESULT_FIFO_OVERFLOW        (1u << 7)
+
+/** Live TDC_STATUS register flags returned by rp_TdcGetStatus(). */
+#define RP_TDC_STATUS_BUSY                 (1u << 0)
+#define RP_TDC_STATUS_FIFO_NONEMPTY        (1u << 1)
+#define RP_TDC_STATUS_FIFO_FULL            (1u << 2)
+#define RP_TDC_STATUS_LAST_TIMEOUT         (1u << 3)
+#define RP_TDC_STATUS_LAST_INVALID         (1u << 4)
+#define RP_TDC_STATUS_ACTIVE_LUT_BANK      (1u << 5)
+#define RP_TDC_STATUS_HIST_CLEAR_BUSY      (1u << 6)
+#define RP_TDC_STATUS_FIFO_OVERFLOW        (1u << 7)
+#define RP_TDC_STATUS_FIFO_LEVEL_SHIFT     8u
+#define RP_TDC_STATUS_FIFO_LEVEL_MASK      (0x1ffu << RP_TDC_STATUS_FIFO_LEVEL_SHIFT)
+#define RP_TDC_STATUS_CALIBRATION_COMPLETE (1u << 17)
+#define RP_TDC_STATUS_INTERNAL_TEST         (1u << 18)
+#define RP_TDC_STATUS_MMCM_SWEEP_ENABLE     (1u << 19)
+#define RP_TDC_STATUS_MMCM_LOCKED           (1u << 20)
+#define RP_TDC_STATUS_MMCM_PS_BUSY          (1u << 21)
+
+/** Dedicated MMCM phase-sweep MMCM_STATUS register flags, see
+ *  rp_TdcMmcmGetStatus(). */
+#define RP_TDC_MMCM_STATUS_LOCKED     (1u << 0)
+#define RP_TDC_MMCM_STATUS_PS_BUSY    (1u << 1)
+#define RP_TDC_MMCM_STATUS_PS_TIMEOUT (1u << 2)
+
+typedef struct {
+    uint32_t sequence_id;
+    uint32_t status;
+    uint32_t coarse_cycles;
+    uint32_t fine_raw_index;
+    uint32_t fine_time_ps;
+    uint64_t total_time_ps;
+    uint32_t analogue_code;
+} rp_tdc_result_t;
+
+int rp_TdcReset(void);
+int rp_TdcEnable(bool enable);
+int rp_TdcGetEnable(bool* enable);
+int rp_TdcSetMode(rp_tdc_mode_t mode);
+int rp_TdcGetMode(rp_tdc_mode_t* mode);
+int rp_TdcSetLaunchPeriod(uint32_t cycles);
+int rp_TdcGetLaunchPeriod(uint32_t* cycles);
+int rp_TdcSetLaunchWidth(uint32_t cycles);
+int rp_TdcGetLaunchWidth(uint32_t* cycles);
+int rp_TdcSetTimeout(uint32_t cycles);
+int rp_TdcGetTimeout(uint32_t* cycles);
+int rp_TdcTrigger(void);
+int rp_TdcGetStatus(uint32_t* status);
+int rp_TdcGetFifoLevel(uint32_t* level);
+int rp_TdcReadResult(rp_tdc_result_t* result);
+int rp_TdcGetLastResult(rp_tdc_result_t* result);
+int rp_TdcGetNumTaps(uint32_t* taps);
+int rp_TdcGetRawCapture(uint32_t start_word, uint32_t* words, uint32_t count);
+int rp_TdcSetInternalTest(bool enable);
+int rp_TdcGetInternalTest(bool* enable);
+
+/** @name Dedicated MMCM phase-sweep self-test
+ *
+ * A dedicated MMCME2_ADV, belonging only to the TDC self-test and never the
+ * shared red_pitaya_pll, regenerates the TDC sampling clock frequency at a
+ * software-commanded, dynamically stepped phase and releases exactly one
+ * measurement edge per rp_TdcMmcmPhaseStep()/trigger cycle. It produces a
+ * commanded nominal coarse+fine phase for boundary, monotonicity and
+ * repeatability testing; it does not calibrate absolute picoseconds and does
+ * not exercise the E3 electrical path. See doc/tdc_registers.md.
+ */
+///@{
+int rp_TdcMmcmSetSweepEnable(bool enable);
+int rp_TdcMmcmGetSweepEnable(bool* enable);
+int rp_TdcMmcmReset(void);
+/** Request one dynamic phase-shift step and wait for it to complete.
+ *  Returns RP_EIPV if the MMCM is not locked, RP_EUF if the request was not
+ *  acknowledged within the FPGA watchdog. */
+int rp_TdcMmcmPhaseStep(bool increase);
+int rp_TdcMmcmGetPhaseCount(int32_t* count);
+int rp_TdcMmcmClearPhaseCount(void);
+int rp_TdcMmcmSetCoarseDelay(uint16_t cycles);
+int rp_TdcMmcmGetCoarseDelay(uint16_t* cycles);
+int rp_TdcMmcmGetStatus(uint32_t* status);
+int rp_TdcMmcmClearTimeout(void);
+///@}
+
+int rp_TdcCalibrationClearHistogram(void);
+int rp_TdcCalibrationStart(uint32_t target_events);
+int rp_TdcCalibrationStop(void);
+int rp_TdcCalibrationGetStatus(uint32_t* status, uint32_t* events_collected);
+int rp_TdcCalibrationReadHistogram(uint32_t start_bin, uint32_t* counts, uint32_t count);
+int rp_TdcCalibrationWriteLut(uint32_t start_bin, const uint16_t* time_ps, uint32_t count);
+int rp_TdcCalibrationReadLut(uint32_t start_bin, uint16_t* time_ps, uint32_t count);
+int rp_TdcCalibrationActivate(bool enable);
+int rp_TdcCalibrationGetActive(bool* enable);
+int rp_TdcCalibrationComputeLut(const uint32_t* histogram, uint32_t bins,
+                                uint32_t clock_period_ps, uint16_t* lut_out);
+
+///@}
+
 /** @name Custom Butterfly Network Register Block
  */
 ///@{

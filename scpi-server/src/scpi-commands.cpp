@@ -30,6 +30,7 @@
 #include "led.h"
 #include "spi.h"
 #include "sweep.h"
+#include "tdc.h"
 #include "uart.h"
 
 #include "scpi/error.h"
@@ -307,6 +308,47 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("BNET:OUT#:DATA?", RP_BNetOutputDataQ),
     SCPI_CMD("BNET:LED6:HB", RP_BNetLed6Heartbeat),
     SCPI_CMD("BNET:LED6:HB?", RP_BNetLed6HeartbeatQ),
+
+    /* LVDS carry-chain time-to-digital converter */
+    SCPI_CMD("TDC:RESet", RP_TdcReset),
+    SCPI_CMD("TDC:ENABle", RP_TdcEnable),
+    SCPI_CMD("TDC:ENABle?", RP_TdcEnableQ),
+    SCPI_CMD("TDC:MODE", RP_TdcMode),
+    SCPI_CMD("TDC:MODE?", RP_TdcModeQ),
+    SCPI_CMD("TDC:TRIGger", RP_TdcTrigger),
+    SCPI_CMD("TDC:STATus?", RP_TdcStatusQ),
+    SCPI_CMD("TDC:TAPs?", RP_TdcTapsQ),
+    SCPI_CMD("TDC:TEST:INTernal", RP_TdcInternalTest),
+    SCPI_CMD("TDC:TEST:INTernal?", RP_TdcInternalTestQ),
+    SCPI_CMD("TDC:LAUNch:PERiod", RP_TdcLaunchPeriod),
+    SCPI_CMD("TDC:LAUNch:PERiod?", RP_TdcLaunchPeriodQ),
+    SCPI_CMD("TDC:LAUNch:WIDTh", RP_TdcLaunchWidth),
+    SCPI_CMD("TDC:LAUNch:WIDTh?", RP_TdcLaunchWidthQ),
+    SCPI_CMD("TDC:TIMeout", RP_TdcTimeout),
+    SCPI_CMD("TDC:TIMeout?", RP_TdcTimeoutQ),
+    SCPI_CMD("TDC:FIFO:COUNt?", RP_TdcFifoCountQ),
+    SCPI_CMD("TDC:FIFO:DATA?", RP_TdcFifoDataQ),
+    SCPI_CMD("TDC:MEASure?", RP_TdcMeasureQ),
+    SCPI_CMD("TDC:MEASure:RAW?", RP_TdcMeasureRawQ),
+    SCPI_CMD("TDC:CALibration:CLEar", RP_TdcCalibrationClear),
+    SCPI_CMD("TDC:CALibration:STARt", RP_TdcCalibrationStart),
+    SCPI_CMD("TDC:CALibration:STOP", RP_TdcCalibrationStop),
+    SCPI_CMD("TDC:CALibration:STATus?", RP_TdcCalibrationStatusQ),
+    SCPI_CMD("TDC:CALibration:HISTogram?", RP_TdcCalibrationHistogramQ),
+    SCPI_CMD("TDC:CALibration:LUT:WRITe", RP_TdcCalibrationLutWrite),
+    SCPI_CMD("TDC:CALibration:LUT:READ?", RP_TdcCalibrationLutReadQ),
+    SCPI_CMD("TDC:CALibration:LUT:ACTivate", RP_TdcCalibrationLutActivate),
+    SCPI_CMD("TDC:CALibration:LUT:ACTivate?", RP_TdcCalibrationLutActivateQ),
+    SCPI_CMD("TDC:MMCM:ENABle", RP_TdcMmcmEnable),
+    SCPI_CMD("TDC:MMCM:ENABle?", RP_TdcMmcmEnableQ),
+    SCPI_CMD("TDC:MMCM:RESet", RP_TdcMmcmReset),
+    SCPI_CMD("TDC:MMCM:STEP", RP_TdcMmcmStep),
+    SCPI_CMD("TDC:MMCM:STATus?", RP_TdcMmcmStatusQ),
+    SCPI_CMD("TDC:MMCM:TIMeout:CLEar", RP_TdcMmcmTimeoutClear),
+    SCPI_CMD("TDC:MMCM:PHASe:COUNt?", RP_TdcMmcmPhaseCountQ),
+    SCPI_CMD("TDC:MMCM:PHASe:CLEar", RP_TdcMmcmPhaseClear),
+    SCPI_CMD("TDC:MMCM:COARse:DELay", RP_TdcMmcmCoarseDelay),
+    SCPI_CMD("TDC:MMCM:COARse:DELay?", RP_TdcMmcmCoarseDelayQ),
 
     /* Generate */
     SCPI_CMD("GEN:RST", RP_GenReset),

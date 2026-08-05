@@ -70,6 +70,7 @@ include_directories(${INSTALL_DIR}/include)
 list(APPEND src
             ${CMAKE_SOURCE_DIR}/src/common.cpp
             ${CMAKE_SOURCE_DIR}/src/bnet.cpp
+            ${CMAKE_SOURCE_DIR}/src/tdc.cpp
             ${CMAKE_SOURCE_DIR}/src/oscilloscope.cpp
             ${CMAKE_SOURCE_DIR}/src/acq_handler.cpp
             ${CMAKE_SOURCE_DIR}/src/rp.cpp
