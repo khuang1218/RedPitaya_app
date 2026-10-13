@@ -31,6 +31,7 @@
 #include "spi.h"
 #include "sweep.h"
 #include "tdc.h"
+#include "pulsegen.h"
 #include "uart.h"
 
 #include "scpi/error.h"
@@ -310,6 +311,21 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("BNET:LED6:HB?", RP_BNetLed6HeartbeatQ),
 
     /* LVDS carry-chain time-to-digital converter */
+    // GPIO pulse timing is in integer nanoseconds; frequency is in hertz.
+    SCPI_CMD("PULSe:RESet", RP_PulseReset),
+    SCPI_CMD("PULSe:TIMing", RP_PulseTiming),
+    SCPI_CMD("PULSe:TIMing?", RP_PulseTimingQ),
+    SCPI_CMD("PULSe:PERiod?", RP_PulsePeriodQ),
+    SCPI_CMD("PULSe:PERiod", RP_PulsePeriod),
+    SCPI_CMD("PULSe:WIDTh", RP_PulseWidth),
+    SCPI_CMD("PULSe:WIDTh?", RP_PulseWidthQ),
+    SCPI_CMD("PULSe:FREQuency", RP_PulseFrequency),
+    SCPI_CMD("PULSe:FREQuency?", RP_PulseFrequencyQ),
+    SCPI_CMD("PULSe:OUTPut", RP_PulseOutput),
+    SCPI_CMD("PULSe:OUTPut?", RP_PulseOutputQ),
+    SCPI_CMD("PULSe:STATus?", RP_PulseStatusQ),
+    SCPI_CMD("PULSe:PIN?", RP_PulsePinQ),
+
     SCPI_CMD("TDC:RESet", RP_TdcReset),
     SCPI_CMD("TDC:ENABle", RP_TdcEnable),
     SCPI_CMD("TDC:ENABle?", RP_TdcEnableQ),

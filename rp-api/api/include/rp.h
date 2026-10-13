@@ -572,6 +572,37 @@ int rp_GetExternalTriggerLevel(float* value);
 
 ///@}
 
+/** @name Single-channel GPIO pulse generator
+ * Requires the custom pulse-generator bitstream (nominal 125 MHz reference).
+ * Period: 4..8589934588 ns in 4 ns steps; HIGH: 2..PERIOD-2 ns in 2 ns steps.
+ * Timing/frequency changes require output OFF and return RP_EOP while ON.
+ * Enable claims the reported GPIO; OFF holds it LOW. Reset releases it back
+ * to normal GPIO control and restores 1 ms period / 500 us HIGH defaults.
+ * Stop/reset may truncate the last pulse. Ethernet is not an edge-time source.
+ * The 250 MHz maximum is a digital timing capability, not an electrical guarantee.
+ */
+///@{
+#define RP_PULSE_STATUS_BUSY    (1u << 0)
+#define RP_PULSE_STATUS_ENABLED (1u << 1)
+#define RP_PULSE_STATUS_CLAIMED (1u << 2)
+#define RP_PULSE_STATUS_ERROR   (1u << 3)
+#define RP_PULSE_STATUS_READY   (1u << 4)
+int rp_PulseSetTiming(uint64_t period_ns, uint64_t high_ns);
+int rp_PulseGetTiming(uint64_t* period_ns, uint64_t* high_ns);
+/** Set an exact period in 4 ns steps, preserving duty ratio rounded to 2 ns. */
+int rp_PulseSetPeriod(uint64_t period_ns);
+/** Round period to nearest 4 ns; preserve duty ratio with HIGH rounded to 2 ns.
+ * Query the resulting frequency/timing to see the actual selected values. */
+int rp_PulseSetFrequency(double frequency_hz);
+int rp_PulseGetFrequency(double* frequency_hz);
+int rp_PulseSetHighTime(uint64_t high_ns);
+int rp_PulseSetEnabled(bool enable);
+int rp_PulseGetEnabled(bool* enable);
+int rp_PulseGetStatus(uint32_t* status);
+int rp_PulseGetPin(rp_dpin_t* pin);
+int rp_PulseReset();
+///@}
+
 /** @name LVDS carry-chain time-to-digital converter
  */
 ///@{

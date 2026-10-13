@@ -1,4 +1,8 @@
 # What is Red Pitaya?
+Custom workspace feature: a single-channel GPIO pulse generator with SCPI control.
+See [GPIO pulse generator handover](HANDOVER_GPIO_PULSE_GENERATOR.md) for timing,
+TDC merge instructions, build checks, and the pending PCB power question.
+
 Credit size mobile IoT hardware & software platform that replaces many expensive laboratory
 measurements and control instruments. Open-source software examples, easy interfacing with
 sensors and actuators, and the possibility to control it using Python, Jupyter, MATLAB or
