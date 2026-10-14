@@ -45,6 +45,7 @@
 #define TDC_MMCM_STATUS_OFFSET    0x84u
 #define TDC_MMCM_COARSE_DLY_OFFSET 0x88u
 #define TDC_MMCM_PHASE_CNT_OFFSET 0x8cu
+#define TDC_INPUT_SELECT_OFFSET   0x90u
 
 #define TDC_ID_MASK               0xffffff00u
 #define TDC_ID_EXPECTED           0x54444300u
@@ -202,6 +203,43 @@ int rp_TdcGetMode(rp_tdc_mode_t* mode) {
     *mode = (control & TDC_CTRL_CAL_MODE) ? RP_TDC_MODE_CALIBRATION :
             (control & TDC_CTRL_CONTINUOUS) ? RP_TDC_MODE_CONTINUOUS :
                                              RP_TDC_MODE_SINGLE;
+    return RP_OK;
+}
+
+static int tdc_CheckInputFeature() {
+    int result = tdc_CheckMap();
+    if (result != RP_OK)
+        return result;
+    uint32_t id = tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET);
+    return ((id & TDC_ID_MASK) == TDC_ID_EXPECTED && (id & 0xffu) >= 4u)
+           ? RP_OK : RP_EUF;
+}
+
+int rp_TdcSetInput(rp_tdc_input_t input) {
+    if (input != RP_TDC_INPUT_LVDS && input != RP_TDC_INPUT_SINGLE)
+        return RP_EOOR;
+    int result = tdc_CheckInputFeature();
+    if (result != RP_OK)
+        return result;
+    if ((tdc_ReadRegSettled(TDC_CONTROL_OFFSET) & TDC_CTRL_ENABLE) ||
+        (tdc_ReadRegSettled(TDC_STATUS_OFFSET) & RP_TDC_STATUS_BUSY))
+        return RP_EIPV;
+    tdc_WriteReg(TDC_INPUT_SELECT_OFFSET, (uint32_t)input);
+    // The RTL also rejects live changes, including a race with another writer.
+    return tdc_ReadRegSettled(TDC_INPUT_SELECT_OFFSET) == (uint32_t)input
+           ? RP_OK : RP_EIPV;
+}
+
+int rp_TdcGetInput(rp_tdc_input_t* input) {
+    if (input == NULL)
+        return RP_UIA;
+    int result = tdc_CheckInputFeature();
+    if (result != RP_OK)
+        return result;
+    uint32_t value = tdc_ReadRegSettled(TDC_INPUT_SELECT_OFFSET);
+    if (value > RP_TDC_INPUT_SINGLE)
+        return RP_EIPV;
+    *input = (rp_tdc_input_t)value;
     return RP_OK;
 }
 

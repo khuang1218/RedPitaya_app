@@ -23,6 +23,12 @@ static const scpi_choice_def_t scpi_TdcMmcmStep[] = {
     SCPI_CHOICE_LIST_END
 };
 
+static const scpi_choice_def_t scpi_TdcInput[] = {
+    {"LVDS", RP_TDC_INPUT_LVDS},
+    {"SINGLE", RP_TDC_INPUT_SINGLE},
+    SCPI_CHOICE_LIST_END
+};
+
 static scpi_result_t tdc_error(scpi_t* context, int result, const char* message, bool query) {
     RP_LOG_CRIT("%s: %s", message, rp_GetError(result));
     if (query && getRetOnError())
@@ -98,6 +104,29 @@ scpi_result_t RP_TdcModeQ(scpi_t* context) {
         return tdc_error(context, result, "Failed to get TDC mode", true);
     const char* name = nullptr;
     if (!SCPI_ChoiceToName(scpi_TdcMode, (int32_t)mode, &name))
+        return SCPI_RES_ERR;
+    SCPI_ResultMnemonic(context, name);
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_TdcInput(scpi_t* context) {
+    int32_t input = 0;
+    if (!SCPI_ParamChoice(context, scpi_TdcInput, &input, true)) {
+        SCPI_LOG_ERR(SCPI_ERROR_ILLEGAL_PARAMETER_VALUE, "Expected LVDS or SINGLE.");
+        return SCPI_RES_ERR;
+    }
+    int result = rp_TdcSetInput((rp_tdc_input_t)input);
+    return result == RP_OK ? SCPI_RES_OK :
+           tdc_error(context, result, "Failed to select TDC input (requires v4+, disabled and idle)", false);
+}
+
+scpi_result_t RP_TdcInputQ(scpi_t* context) {
+    rp_tdc_input_t input = RP_TDC_INPUT_LVDS;
+    int result = rp_TdcGetInput(&input);
+    if (result != RP_OK)
+        return tdc_error(context, result, "Failed to get TDC input", true);
+    const char* name = nullptr;
+    if (!SCPI_ChoiceToName(scpi_TdcInput, (int32_t)input, &name))
         return SCPI_RES_ERR;
     SCPI_ResultMnemonic(context, name);
     return SCPI_RES_OK;

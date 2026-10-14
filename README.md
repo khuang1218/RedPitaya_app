@@ -1,7 +1,7 @@
 # What is Red Pitaya?
-Custom workspace feature: a single-channel GPIO pulse generator with SCPI control.
-See [GPIO pulse generator handover](HANDOVER_GPIO_PULSE_GENERATOR.md) for timing,
-TDC merge instructions, build checks, and the pending PCB power question.
+Custom workspace features include BNET, an LVDS CARRY4 TDC, and a GPIO pulse generator.
+See the [master handover](HANDOVER.md) for current architecture, PCB wiring,
+validation results, build instructions, and outstanding work.
 
 Credit size mobile IoT hardware & software platform that replaces many expensive laboratory
 measurements and control instruments. Open-source software examples, easy interfacing with

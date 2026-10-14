@@ -613,6 +613,12 @@ typedef enum {
     RP_TDC_MODE_CALIBRATION = 2
 } rp_tdc_mode_t;
 
+/** External return input. Internal/MMCM test sources take precedence. */
+typedef enum {
+    RP_TDC_INPUT_LVDS = 0,   /**< E3 DIO18_P/N, contacts 31/33. */
+    RP_TDC_INPUT_SINGLE = 1  /**< E1 DIO2_P, contact 7, 3.3 V digital. */
+} rp_tdc_input_t;
+
 /** Per-result status flags returned in rp_tdc_result_t::status. */
 #define RP_TDC_RESULT_VALID                (1u << 0)
 #define RP_TDC_RESULT_NO_TRANSITION        (1u << 1)
@@ -661,6 +667,13 @@ int rp_TdcEnable(bool enable);
 int rp_TdcGetEnable(bool* enable);
 int rp_TdcSetMode(rp_tdc_mode_t mode);
 int rp_TdcGetMode(rp_tdc_mode_t* mode);
+/** Set requires disabled and idle (RP_EIPV otherwise).
+ * Both functions require FPGA TDC v4+ (RP_EUF on earlier images).
+ * A changed source resets results/FIFO/histogram and disables LUT correction.
+ * The selection survives rp_TdcReset(); full FPGA reset restores LVDS.
+ * DIO2_P is reserved input-only in the custom image, regardless of selection. */
+int rp_TdcSetInput(rp_tdc_input_t input);
+int rp_TdcGetInput(rp_tdc_input_t* input);
 int rp_TdcSetLaunchPeriod(uint32_t cycles);
 int rp_TdcGetLaunchPeriod(uint32_t* cycles);
 int rp_TdcSetLaunchWidth(uint32_t cycles);

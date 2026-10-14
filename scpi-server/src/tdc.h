@@ -9,6 +9,8 @@ scpi_result_t RP_TdcEnable(scpi_t* context);
 scpi_result_t RP_TdcEnableQ(scpi_t* context);
 scpi_result_t RP_TdcMode(scpi_t* context);
 scpi_result_t RP_TdcModeQ(scpi_t* context);
+scpi_result_t RP_TdcInput(scpi_t* context);
+scpi_result_t RP_TdcInputQ(scpi_t* context);
 scpi_result_t RP_TdcTrigger(scpi_t* context);
 scpi_result_t RP_TdcStatusQ(scpi_t* context);
 scpi_result_t RP_TdcTapsQ(scpi_t* context);

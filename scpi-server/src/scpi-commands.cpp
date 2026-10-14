@@ -331,6 +331,8 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("TDC:ENABle?", RP_TdcEnableQ),
     SCPI_CMD("TDC:MODE", RP_TdcMode),
     SCPI_CMD("TDC:MODE?", RP_TdcModeQ),
+    SCPI_CMD("TDC:INPut", RP_TdcInput),
+    SCPI_CMD("TDC:INPut?", RP_TdcInputQ),
     SCPI_CMD("TDC:TRIGger", RP_TdcTrigger),
     SCPI_CMD("TDC:STATus?", RP_TdcStatusQ),
     SCPI_CMD("TDC:TAPs?", RP_TdcTapsQ),
