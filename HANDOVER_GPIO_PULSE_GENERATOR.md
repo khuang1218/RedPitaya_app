@@ -2,6 +2,8 @@
 
 Date: 2026-10-13. Target: STEMlab 125-14 Z7020 Gen 2 / Z20_G2.
 
+Latest source review and non-Vivado HDL validation: 2026-10-14.
+
 ## Scope and current validation boundary
 
 The source implements one continuous pulse output on **DIO1_P**, controlled by
@@ -10,28 +12,46 @@ board's GPIOs. `_P` and `_N` identify the two pin banks; they can be independent
 single-ended GPIOs. This feature uses one pin, not a differential pair.
 
 There are two separate repositories. Paths below are relative to their roots:
-`RedPitaya-FPGA` and `RedPitaya_app`. This device's FPGA checkout has **no TDC
-RTL**, although the app repo has TDC API/SCPI code and a document describing
-TDC integration. The other device may hold the unsynced TDC-integrated design.
-**Merge into that design; do not replace its custom top or decoder wholesale.**
+`RedPitaya-FPGA` and `RedPitaya_app`. The current FPGA checkout **contains TDC
+RTL** and its E3/MMCM integration. On 2026-10-14 the pulse instance and the
+shared BNET/TDC/pulse decoder were merged into that existing custom top.
+**Preserve its TDC instance, E3 routing, primitive hierarchy and placement.**
 
-The user instructed that HDL checks and Vivado compilation should be performed
-on the other device. No further local HDL checks were run after that instruction.
-Before the instruction arrived:
+The user authorized fresh syntax checks and bug review on 2026-10-14, with an
+explicit instruction **not to run Vivado here**. The current revision passed:
 
-- Icarus Verilog 13.0 simulation reported `tb_pulse_gen: PASS`, using the
-  explicitly test-only ideal ODDR model, not Xilinx UNISIM or physical delays.
-- slang 12.0 compiled the pulse module/testbench semantically with no errors.
-- The custom top passed a syntax parse before the final `ser_clk` hookup.
+- slang 12.0 syntax parsing of the relevant custom top, pulse, BNET, TDC,
+  PLL, interfaces and testbenches with `Z20_G2` and `Z20_xx` defined.
+- slang semantic compilation of `pulse_gen` / `tb_pulse_gen`: **0 errors,
+  0 warnings**. The expanded regression includes delayed ownership and ENABLE
+  status synchronizers in addition to the original saved-HIGH startup case.
+- slang semantic compilation of the merged normal top: **0 errors,
+  33 warnings**; `SCOPE_ONLY`: **0 errors, 16 warnings**. A default simulation
+  timescale of `1ns/1ps` was supplied. Generated PS/IP and unprovided vendor
+  primitives were treated as external modules (`--ignore-unknown-modules`),
+  so this is not a complete vendor elaboration of those blocks.
+- Icarus Verilog 12.0 `tb_pulse_gen: PASS` with the explicitly test-only ideal
+  ODDR model, and separately with the installed Vivado 2020.1 **UNISIM ODDR
+  source model plus glbl**, using Icarus as the simulator. No Vivado executable
+  was invoked. Neither run establishes physical GPIO performance.
+- Icarus `tb_tdc_logic PASS` with the installed UNISIM MMCME2_ADV/BUFG source
+  models. This checks the existing encoder/FIFO/stimulus/MMCM controller test,
+  not physical carry delays, placement or absolute phase accuracy.
+- A generated Icarus test extracted the actual decoder and pulse instance from
+  the current custom top. It passed reads/writes across **all 16 subregions**,
+  BNET/TDC/pulse isolation, pulse ID/shadow readback and invalid-region errors.
+  BNET and TDC responses in that decoder test were registered probes; it is not
+  a full BNET accelerator or TDC measurement-path regression.
 
-Those HDL results refer to the preceding revision. Subsequent source review
-added a startup driver guard and its regression case: a saved HIGH GPIO data
-bit on an input must not leak a pulse while ON claims it. The ODDR is switched
-to LOW before the driver is enabled. **The current revision, including that
-guard and final clock hookup, still needs fresh Vivado/UNISIM verification on
-the other device.** The guard was not locally simulated after the stop request.
+Tools, reproduction scripts and logs are under the app repo's ignored
+`build/hdl-tools/` and `build/hdl-review/` directories. In that checkout,
+`wsl -d Ubuntu-24.04 -- bash build/hdl-review/run_pulse_sim.sh` runs both pulse
+models; `run_tdc_sim.sh` runs the existing TDC test. Regenerate the extracted
+decoder test with `build/hdl-review/make_decoder_tb.py` before using
+`run_decoder_sim.sh` after any top edits. These are local check artifacts,
+never Vivado design sources or deployment files.
 
-Software checks completed: the new API and SCPI `.cpp` files passed native
+Software checks recorded by the preceding handover: the new API and SCPI `.cpp` files passed native
 Windows GCC 16.2 C++20 syntax checks against the real repository headers and
 RedPitaya/scpi-parser commit `4e879901b51cbb43dab36dd83f95a23f1dbaa4c0`.
 Minimal Windows-only shims supplied `MAP_FAILED` and syslog constants. This
@@ -40,11 +60,58 @@ or live SCPI correctness. The full Linux/API/server build remains required.
 The provided Python smoke test passed an AST syntax check and its `--help`
 invocation; neither operation contacted hardware.
 
-**No Vivado synthesis, UNISIM simulation, placement, routing, timing/DRC,
+**No Vivado/XSim execution, synthesis, placement, routing, timing/DRC,
 bitstream generation, deployment, or board/PCB measurement has been completed
-for this feature. No board was contacted.** Do not claim 250 MHz electrical
+for this feature. No board was contacted.** The source-model simulations above
+were run with Icarus only. Do not claim 250 MHz electrical
 performance from the logic test. Temporary local check tools are under the
 app repo's ignored `build/` directory and are not deployment files.
+
+## Bugs corrected in the 2026-10-14 review
+
+- The merged top had routed DIO1_P to undriven `pulse_pin_data` / `pulse_pin_dir`
+  signals, with no `pulse_gen` instance. The instance now uses `adc_clk` for
+  its bus and the existing 250 MHz `ser_clk` for its ODDR domain.
+- BNET was connected directly to slot 7 while the TDC enables were undriven.
+  Regions 0/1/2 now independently gate both WEN and REN into BNET/TDC/pulse,
+  with one response mux and registered error acknowledgement for other regions.
+- Both Z20_G2 Tcl entry points omitted the pulse and TDC constraint files.
+  They now include both, with the pulse XDC enabled only for implementation.
+  A generated `tdc_placement_selected.xdc` is also included for implementation
+  when present. `SCOPE_ONLY` omits these custom constraints and now stubs slot 7.
+- The startup guard could be bypassed if ownership synchronized later than
+  the APPLY request. The new delayed-claim test **failed before the fix**.
+  Waveform phase/data now stay at zero until the driver guard completes,
+  ensuring that an input pin is first driven LOW and then begins a full pulse.
+- Live timing updates now use the last accepted mailbox ENABLE state for
+  rejection. A delayed synchronized status bit cannot authorize an update while
+  ON; the regression explicitly tests a stale ENABLE status.
+- Strict semantic checking found seven pre-existing language errors: TDC MMCM
+  control signals and ASG signals used before declaration, and two 2-bit ASG
+  enum literals assigned to a 1-bit enum. Declarations were moved and literal
+  widths corrected without changing their values or FSM behavior.
+
+## Remaining validation and unresolved items
+
+- **No selected TDC placement XDC was found** in the working FPGA repository or
+  in the saved `C:/vivadoprj/RedPitaya-FPGA/prj/v0.94/project` constraints.
+  The existing `prj/v0.94/scripts/tdc_placement.tcl` must be used after opening
+  the synthesized design and selecting a legal carry column. Write the result
+  to `prj/v0.94/sdc/tdc_placement_selected.xdc`; both entry points will pick it
+  up. No coordinates were invented during this review. An initial synthesis
+  can precede this selection; require the selected placement before accepting
+  implementation or calibrating the new bitstream.
+- Normal-top warnings comprise 20 unconnected input ports, 11 unconnected
+  output ports, and two SDF shift-count warnings at the final stage. The final
+  stage's group-base shift yields zero as intended. The remaining port warnings
+  are in existing diagnostic, parallel/daisy, interconnect and ASG/scope code;
+  they are not new pulse connection warnings. Inspect the vendor elaboration
+  before treating the entire design as validated.
+- Full generated-IP elaboration, BRAM inference/utilization, CDC constraints,
+  ODDR IOB placement, 250 MHz timing, TDC placement/DRC, Linux/ARM API/server
+  builds, matching deployment and PCB/scope measurements remain pending.
+  No further confirmed pulse logic defect was found by these checks; this is
+  not a guarantee that the whole BNET/TDC/pulse system is free of bugs.
 
 ## Timing contract
 
@@ -122,6 +189,10 @@ Merge FPGA edits in:
   select the custom top definition and add the new implementation-only XDC.
   The project script now defines both `Z20_G2` and `Z20_xx`, matching the batch
   script and the 11-wide expansion/33-wide PS GPIO configuration.
+- `prj/v0.94/rtl/tdc_mmcm_stimulus.sv` and
+  `rtl/classic/red_pitaya_asg_ch.sv`: declaration-order / enum-width syntax fixes.
+  Keep `prj/v0.94/sdc/tdc_Z20_G2.xdc` and the existing placement helper with the
+  merged TDC design. Include the selected-placement XDC once generated.
 
 New app files:
 
@@ -277,7 +348,7 @@ first verify the PCB and scope connection before enabling that case.
     with the **actual PCB receiver and traces**. Quantify jitter and receiving
     threshold/minimum-pulse compliance. Do not infer performance from a counter.
 
-## PCB connection and unresolved 3.3 V DC request
+## PCB connection and confirmed 3.3 V power request
 
 The PCB's input circuitry determines the usable pulse speed: input capacitance,
 logic thresholds, minimum pulse width, trace/interconnect length, grounding and
@@ -286,20 +357,20 @@ Allow for source damping/ buffering if measurement shows it is needed. A 50-ohm
 DC load would draw 66 mA at 3.3 V, beyond the documented GPIO drive capability;
 do not treat this output as a 50-ohm signal-generator port.
 
-**Pending colleague confirmation, requested for 2026-10-14:** Are the proposed
-two DC pins meant to **power the PCB** or provide **constant HIGH logic inputs**?
-The user does not yet know. No GPIOs have been allocated or configured for that
-request. Record the colleague's answer before deciding the wiring/code:
+**Confirmed by the user on 2026-10-14:** the two DC connections supply PCB
+power. Use the dedicated **E1 +3V3 pins 1/2** and **GND pins 25/26**. No GPIOs
+are allocated for this request, and no pulse/GPIO HDL or SCPI command is needed
+to produce these supply rails.
 
-- Power: use dedicated E1 +3V3 pins 1/2 and GND pins 25/26, after checking PCB
-  steady-state/inrush current and the board supply budget. Red Pitaya publishes
-  a **0.5 A total** budget for the two E1 3.3 V supply pins; confirm the actual
-  board revision and available margin. GPIO pins are not PCB supply outputs.
-- Constant HIGH references: existing `DIG:PIN:DIR OUT,<pin>` and
-  `DIG:PIN <pin>,1` can already do this on spare GPIOs. Confirm input loading,
-  voltage compatibility and required state during boot/reset/power sequencing.
-  Do not parallel GPIO outputs to obtain more supply current.
-- Also obtain receiver part numbers/schematic, input impedance/capacitance,
+The user estimates the current demands as approximately **7 mA and 70 mA**;
+if these are simultaneous separate loads, their combined demand is about
+**77 mA**. Red Pitaya documents **0.5 A total across both E1 +3V3 pins**, not
+0.5 A per pin. These numbers are estimates; the exact steady-state/inrush
+interpretation, receiver schematic and available supply margin have not been
+measured in this review. The official pinout/current limits were checked on
+2026-10-14 at the reference below.
+
+- Obtain receiver part numbers/schematic, input impedance/capacitance,
   PCB/connector lengths, logic threshold/minimum pulse width, and whether the
   PCB can be powered independently of the Red Pitaya.
 
