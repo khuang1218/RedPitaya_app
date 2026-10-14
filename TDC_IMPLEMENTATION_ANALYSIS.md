@@ -1,5 +1,192 @@
 # LVDS CARRY4 TDC implementation for LED7_mod + BNET
 
+## Hardware bring-up findings (MMCM random-delay closed-loop test)
+
+`scpi-tests/tdc_mmcm_random_delay_test.py` (40 random targets x 5 repeats)
+found that repeatability is excellent almost everywhere -- many points
+returned bit-identical `fine_raw_index` across all 5 repeats -- except for
+commanded phase-step values below roughly 120/447 (~27% of the period),
+where `coarse_cycles` was sometimes off by exactly one whole clock period
+(8000 ps) from the value seen at nearby, non-boundary commanded phases, while
+`fine_raw_index` stayed essentially identical either way. One point
+(commanded phase 117) reproduced this as genuine repeat-to-repeat instability
+within a single fixed target: 3 of 5 repeats read `coarse_cycles=7`, 2 of 5
+read `6`, with the fine reading unchanged (~221-222) throughout.
+
+An initial hypothesis (recorded in chat, not committed to RTL) proposed using
+a high `fine_raw_index` to detect and correct this, reasoning that the carry
+chain is deliberately longer than one clock period so a "wrapped" high-tap
+reading might indicate the wrong coarse cycle was latched. That hypothesis
+does not hold up: 221 sits well inside the chain's normal single-period
+range (the useful range tops out around tap ~414, per the calibration run
+above), not near the tail where that theory would require it. It was
+discarded rather than implemented.
+
+**Root cause**: `tdc_mmcm_stimulus.sv`'s own timing-convention comment
+already anticipated this ("the extra +/-1 CLKOUT0-cycle synchronizer
+uncertainty is absorbed by the coarse counter exactly like the other
+measurement sources") but that assumption does not fully hold. The fire
+request crosses from `clk_i` into `CLKOUT0` (the MMCM's phase-shifted output)
+through a 2-flop toggle synchronizer. Because CLKOUT0's phase relative to
+`clk_i` is intentionally swept through every possible offset (that is the
+entire point of the phase sweep), some commanded phase will always place the
+`fire_toggle` transition close to a `test_edge_clk` sampling edge -- this is
+not avoidable by a smarter synchronizer topology, only narrowable. Crucially,
+the resulting ambiguity carries no information in the captured (coarse, fine)
+result that could disambiguate it after the fact: the fine reading is
+identical whichever way the crossing resolves (confirmed directly in the
+phase-117 data above), so no post-hoc arithmetic on the captured result can
+correct it -- any such attempt is guessing.
+
+**Fix applied**: added a third synchronizing stage (`toggle_settled`) to the
+crossing in `tdc_mmcm_stimulus.sv`, narrowing (not eliminating -- see above)
+the risk window by giving the signal one additional `test_edge_clk` period to
+finish resolving before the stretch counter/`event_o` act on it. This shifts
+the fixed pipeline latency by exactly one more `test_edge_clk` cycle, which
+`capture_coarse`'s direct clk_i-domain measurement already absorbs correctly
+with no other RTL change needed. Not yet re-tested on hardware.
+
+**Not fixed, and not fixable by RTL arithmetic alone**: any residual window
+after the extra stage is a physically inherent limitation of using the
+phase-swept clock itself to detect the fire request, analogous to the
+carry-column clock-region dead zone found earlier -- both are "characterize
+and document" limitations of a specific internal self-test mechanism, not
+digital-logic bugs. The correct complementary fix is software-side: densely
+re-sweep phase near the previously observed instability with
+`tdc_mmcm_random_delay_test.py` (many repeats per point, linear not random
+order) to measure whether/how much the window narrowed, and record any
+persisting risky phase range as a documented exclusion, the same way
+`--known-dead-zone` records the carry-column finding.
+
+## Hardware bring-up findings (first real-board 100k-event calibration run)
+
+`scpi-tests/tdc_calibrate.py --internal --events 100000` against the same
+board produced a histogram with `useful_bins: 414`, `peak |DNL|: 2.196 LSB`,
+`peak |INL|: 8.426 LSB`. Two small (1-2 bin) dead spots at raw index 99-100
+and 203-204 land almost exactly on a CARRY4-to-CARRY4 cascade seam (index a
+multiple of 4) and are the expected, benign artifact of that connection using
+a different route than the four intra-cell taps.
+
+A third dead region does not fit that pattern: **16 consecutive zero-count
+bins from raw index 305 to 320**, spanning roughly CARRY4 cells 76-80. Unlike
+the two seam dips, it is 8x wider, sits well inside the populated range
+rather than at either edge, and its immediate neighbors (index 304, 321) have
+perfectly ordinary bin widths -- there is no abnormally wide neighboring bin
+absorbing the "missing" time the way a single large real routing delay would
+produce. The encoder (`tdc_thermometer_encoder.sv`) has no tap-index-dependent
+logic (a plain serial leading-ones counter), so it cannot selectively reject
+one tap range, and the histogram is read in 64-element SCPI chunks that do not
+align with this range, ruling out a read-chunking bug in the Python tool.
+That leaves a physical routing discontinuity in the carry column as the
+likely cause -- exactly the risk `tdc_placement.tcl` warns about ("A 128-slice
+line will cross clock-region boundaries on this part; inspect those
+boundaries deliberately") and the implementation acceptance checklist in
+section 8.4 ("no unexpected physical jump at a clock-region boundary").
+
+**Confirmed root cause.** A second independent 100k-event run
+(`tdc_calibration_20260806_170814.json`) reproduced the identical zone (start
+index 305, length 16, CARRY4 cells 76-80) with only the expected +/-1 bin
+statistical wobble elsewhere, ruling out sampling noise. The user then queried
+`CLOCK_REGION` for `gen_carry[74..82]` in the implemented design: `SLICE_X45Y96`
+through `Y99` all report `X0Y1`, while `Y100` through `Y104` report `X0Y2` --
+i.e. `SLICE_X/Y` addresses stay perfectly sequential (confirming
+`tdc_place_chain` did place a genuinely contiguous column, no LOC gap) but the
+clock-region boundary falls between `gen_carry[77]` and `gen_carry[78]`,
+exactly inside the dead zone. The dedicated `CARRY4` `CO`->`CIN` cascade wire
+only exists within one clock region; crossing to the next region forces that
+one connection through general routing instead, which is slower and settles
+several downstream taps together rather than progressively -- the classic
+missing-code signature of a delay-line TDC at a non-uniform stage boundary.
+This is not a placement mistake and, importantly, **is not avoidable by
+choosing different `SLICE_X/Y0` coordinates**: clock regions on this device
+are roughly 50 rows tall and the chain needs 128 contiguous rows, so any
+single vertical 128-`CARRY4` column crosses at least one region boundary
+regardless of where it is placed (here: cells 0-77 in `X0Y1`, cells 78-127 in
+`X0Y2`). The two small 2-bin dips at raw index 99-100 and 203-204 are
+unrelated to this -- they land at CARRY4-cell cascade seams (indices 25*4 and
+51*4) far from Y100, well inside the `X0Y1` region, and are the ordinary,
+much smaller ripple from that closer-spaced cascade connection.
+
+Given the crossing is architecturally unavoidable for a single column of this
+length on this device, the practical response is to accept and document it
+rather than chase a placement fix: the LUT calibration already tolerates
+unreachable codes gracefully (codes 305-320 are simply never produced by real
+events, so nothing downstream breaks), costing about 3% of the code range's
+resolution at this one known, now-explained location. The only way to
+actually recover it would be splitting the chain into multiple sub-chains
+each confined to one clock region and reconstructing a single monotonic time
+axis across them in the encoder/calibration -- a real architectural change,
+not recommended unless the application's delay range of interest specifically
+falls inside this window. Do not shrink/skip cells in `tdc_carry_chain.sv` to
+"route around" this -- moving which four cells are affected does not remove
+the underlying region boundary.
+
+`tdc_calibrate.py` now runs `find_internal_dead_zones()` on every histogram,
+distinguishing benign cascade-seam dips and the expected end-of-chain tail
+from internal runs longer than `--max-benign-dead-run` (default 2 bins), and
+records any found under `metrics.large_dead_zones` in the saved JSON, so this
+class of problem is surfaced automatically instead of being silently folded
+into `dead_bins`/`peak_abs_inl_lsb`.
+
+Following the "accept and document" decision above, the tool also accepts a
+repeatable `--known-dead-zone START-END` (raw tap indices, inclusive) so a
+characterized zone such as `--known-dead-zone 305-320` is reported
+informationally (`metrics.documented_dead_zones`) rather than as a warning on
+every subsequent run, while anything not covered by a documented range is
+still flagged loudly under `metrics.new_dead_zones` -- so a genuinely new
+anomaly (different placement, a marginal path that only shows up at
+temperature, etc.) cannot get lost in an accepted-and-ignored warning. The
+terminal summary was also expanded to print event count/rate, tap coverage
+percentage, chain-coverage-vs-clock-period, and the precision-test result in
+one block instead of two terse lines.
+
+## Hardware bring-up findings (first real-board run of the MMCM sweep)
+
+The user built, placed and loaded a bitstream including `tdc_mmcm_stimulus.sv`
+and ran `scpi-tests/tdc_internal_selftest.ipynb` against a real board. Two
+results from that run matter beyond this notebook:
+
+1. **The dedicated MMCM locks on real hardware and its phase steps are
+   monotonic.** `TDC:MMCM:STATus?` reported `LOCKED` after `MMCM_SWEEP_ENABLE`,
+   and a 40-step `INCREASE` sweep produced a raw tap index that decreased by
+   exactly one physical bin per step with no exceptions (after correcting for
+   bug #2 below) -- i.e. `MMCME2_ADV` synthesis, placement, CMT-site legality,
+   clock resources, `PSCLK/PSEN/PSINCDEC/PSDONE` protocol and the toggle-CDC
+   one-edge generator all worked as designed on this build. This resolves the
+   "Not done" status of implementation-sequence steps 1-2 in the MMCM section
+   below for *this specific placement*; it does not certify absolute
+   picoseconds or a different placement/bitstream.
+2. **Found and fixed: the FIFO result record was 1 bit narrower than the
+   documented/API layout.** `tdc_top.sv`'s `fifo_push_data` concatenation
+   summed to 127 bits (`46+16+9+32+8+16`), not the 128 the doc and
+   `tdc_UnpackResult()` in `tdc.cpp` assume (which reserve a fixed **10-bit**
+   `fine_raw` field, bits 65:56, to stay independent of `INDEX_W`). The
+   missing bit meant bit 65 of the record -- actually `fine_ps`'s LSB -- was
+   read by the API as `fine_raw` bit 9, producing a spurious `+512` on raw
+   fine index roughly half the time (confirmed: subtracting 512 from every
+   out-of-range sample in the sweep above produces a perfectly monotonic
+   sequence), and `fine_time_ps`/`total_time_ps` were each off by one bit for
+   the same reason. Fixed by zero-extending `captured_fine_raw` to a fixed
+   10-bit field in the concatenation (`{(10-INDEX_W){1'b0}}, captured_fine_raw`)
+   so the wire format matches the already-committed 128-bit doc/API layout
+   exactly, for any `INDEX_W <= 10`. This is a pre-existing bug (predates the
+   MMCM work) and requires a bitstream rebuild before FIFO-derived fields
+   (`TDC:MEASure?`, `rp_TdcReadResult`) are trustworthy; the histogram path
+   (`TDC:CALibration:HISTogram?`) was never affected because it indexes
+   directly off the 9-bit `captured_fine_raw` in hardware, bypassing the FIFO.
+3. Separately, also found and fixed: `trigger_pending` (the latch meant to
+   hold a `SINGLE_TRIGGER` that arrives while the FSM can't immediately arm)
+   was only ever set inside the `if (!core_rstn)` reset branch of the
+   controller's `always_ff`, i.e. never during normal operation. A trigger
+   pulse that missed its ~50%-probability arming window against the
+   free-running async source was silently dropped, which is what made
+   `TDC:MEASure?` hang until the SCPI server's own poll timeout and then the
+   SCPI client's socket timeout. Fixed by moving the set logic into the
+   operating branch, ahead of the `case (state)` block.
+
+Both fixes are in the source tree but have **not** been through a fresh
+Vivado build; the notebook run that surfaced them predates these fixes.
+
 ## Current outcome and validation boundary
 
 The TDC has been integrated into the active `red_pitaya_top_LED7_mod.sv` design
@@ -236,6 +423,20 @@ in userspace until its transfer function has been measured.
 LUT values and DNL/INL metrics, uploads and verifies all entries, activates the
 new bank, optionally performs a fixed-delay precision test, and stores JSON tied
 to a caller-supplied bitstream identifier.
+
+`scpi-tests/tdc_mmcm_random_delay_test.py` closes the loop the other way:
+for each of many random commanded delays (a random whole-cycle coarse part
+plus a random MMCM phase-step count), it moves the dedicated MMCM to that
+exact commanded point (verifying the hardware's own phase-step counter
+rather than trusting a locally tracked value), takes several repeated
+single-shot measurements there, and reports both repeatability (jitter at a
+fixed commanded point) and trend (a linear fit/correlation of measured vs.
+commanded delay across all random points). It accepts the same
+`--known-dead-zone` syntax as `tdc_calibrate.py` to flag (not fail on) any
+valid sample that unexpectedly lands inside a documented dead zone. Like the
+MMCM sweep itself, this characterizes internal self-consistency and
+repeatability, not absolute picosecond accuracy, and does not exercise the E3
+electrical path.
 
 ## Internal hardware self-test without E3 wiring
 
@@ -698,6 +899,16 @@ Initial API checks should be:
 - The 128-CARRY4 chain length is an initial experiment, not a guaranteed 8 ns
   coverage specification.
 - Physical carry bins and clock-boundary regions cannot be validated in RTL.
+  The first real 100k-event calibration confirmed exactly this: a 16-tap dead
+  zone at raw index 305-320, CARRY4 cells 76-80, verified by `CLOCK_REGION`
+  query to be a clock-region crossing between `gen_carry[77]` and
+  `gen_carry[78]` (see "Hardware bring-up findings" above). This is
+  architecturally unavoidable for a single 128-tall CARRY4 column on this
+  device (clock regions are ~50 rows tall) and is not fixable by re-placing
+  the column to a different `SLICE_X/Y0` -- it must be accepted as a
+  documented ~3% code-range precision loss, or addressed by splitting the
+  chain across multiple region-confined sub-chains if the application
+  actually needs full resolution at that specific delay.
 - Calibration LUT/histogram storage intentionally uses distributed RAM for its
   asynchronous indexed reads. Check LUT utilization and timing; a later
   synchronous BRAM pipeline is available if resource pressure requires it.
@@ -705,13 +916,16 @@ Initial API checks should be:
   so this is not a full-rate continuous 125 MHz TDC.
 - Continuous forwarded-clock mode and FPGA analogue-code conversion are not
   implemented; both are explicit later phases.
-- The dedicated MMCM phase-sweep source is implemented in RTL/registers/API/
-  SCPI but has not been run through Vivado. Its CMT site legality, VCO/BUFG
-  resource availability, generated-clock/async-group constraints and
-  hierarchical XDC cell-name patterns are all unverified and must be checked
-  against post-synthesis clock-utilization and netlist data before trusting
-  it. Sweep automation (start/stop/step size, per-phase repeat counts) is not
-  implemented in the FPGA; software issues one phase step at a time.
+- The dedicated MMCM phase-sweep source has now locked and produced a
+  monotonic sweep on one real placed build (see "Hardware bring-up findings"
+  above), which answers CMT-site legality and clock-resource availability
+  for *that* build. Its generated-clock/async-group constraints and
+  hierarchical XDC cell-name patterns have still not been separately checked
+  against the synthesized netlist, and a different placement/bitstream (e.g.
+  after the two bug fixes above are rebuilt) is not automatically covered by
+  this one successful run. Sweep automation (start/stop/step size, per-phase
+  repeat counts) is not implemented in the FPGA; software issues one phase
+  step at a time.
 - The interrupt registers are present, but no PS interrupt line is connected in
   interface v1.
 - Hardware acceptance criteria cannot be claimed until synthesis, contiguous

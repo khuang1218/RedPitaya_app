@@ -1,0 +1,2434 @@
+{
+  "format": "red-pitaya-carry4-tdc-mmcm-random-delay-test-v1",
+  "created_utc": "2026-08-07T09:01:20.207198+00:00",
+  "host": "169.254.77.151",
+  "seed": 2452075207,
+  "clock_period_ps": 8000,
+  "nominal_phase_step_ps": 17.857142857142858,
+  "max_coarse_cycles": 3,
+  "max_phase_steps": 447,
+  "known_dead_zones": [],
+  "summary": {
+    "trials": 40,
+    "repeats": 5,
+    "total_samples": 200,
+    "total_valid": 199,
+    "total_invalid": 1,
+    "phase_mismatch_count": 0,
+    "fully_invalid_trial_count": 0,
+    "partially_invalid_trial_count": 1,
+    "mean_repeat_jitter_ps": 104.69310962970209,
+    "max_repeat_jitter_ps": 3916.7379284297285,
+    "linear_fit": {
+      "n": 40,
+      "slope": 1.0286820422511511,
+      "intercept": 34923.078959104954,
+      "correlation": 0.9555682268476384,
+      "residual_rms_ps": 2845.7420199950725
+    },
+    "known_dead_zone_hits": [],
+    "calibration_lut_active": false
+  },
+  "trials_detail": [
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 206,
+      "commanded_total_ps": 27678.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 206,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 61868.8,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 34190.228571428575,
+      "samples": [
+        {
+          "sequence": 81,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 61875
+        },
+        {
+          "sequence": 82,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 61875
+        },
+        {
+          "sequence": 83,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 61875
+        },
+        {
+          "sequence": 84,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 138,
+          "fine_time_ps": 2156,
+          "total_time_ps": 61844
+        },
+        {
+          "sequence": 85,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 61875
+        }
+      ],
+      "trial_index": 0
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 143,
+      "commanded_total_ps": 18553.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 143,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 52950.4,
+      "measured_stddev_ps": 15.186836405255704,
+      "error_ps": 34396.828571428574,
+      "samples": [
+        {
+          "sequence": 41,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 194,
+          "fine_time_ps": 3031,
+          "total_time_ps": 52969
+        },
+        {
+          "sequence": 42,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 196,
+          "fine_time_ps": 3062,
+          "total_time_ps": 52938
+        },
+        {
+          "sequence": 43,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 194,
+          "fine_time_ps": 3031,
+          "total_time_ps": 52969
+        },
+        {
+          "sequence": 44,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 196,
+          "fine_time_ps": 3062,
+          "total_time_ps": 52938
+        },
+        {
+          "sequence": 45,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 196,
+          "fine_time_ps": 3062,
+          "total_time_ps": 52938
+        }
+      ],
+      "trial_index": 1
+    },
+    {
+      "commanded_coarse_cycles": 1,
+      "commanded_phase_steps": 393,
+      "commanded_total_ps": 15017.857142857143,
+      "phase_verified": true,
+      "actual_phase_steps": 393,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 49813.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34795.142857142855,
+      "samples": [
+        {
+          "sequence": 171,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 49813
+        },
+        {
+          "sequence": 172,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 49813
+        },
+        {
+          "sequence": 173,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 49813
+        },
+        {
+          "sequence": 174,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 49813
+        },
+        {
+          "sequence": 175,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 49813
+        }
+      ],
+      "trial_index": 2
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 219,
+      "commanded_total_ps": 3910.714285714286,
+      "phase_verified": true,
+      "actual_phase_steps": 219,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 38032.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34121.28571428572,
+      "samples": [
+        {
+          "sequence": 96,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 126,
+          "fine_time_ps": 1968,
+          "total_time_ps": 38032
+        },
+        {
+          "sequence": 97,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 126,
+          "fine_time_ps": 1968,
+          "total_time_ps": 38032
+        },
+        {
+          "sequence": 98,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 126,
+          "fine_time_ps": 1968,
+          "total_time_ps": 38032
+        },
+        {
+          "sequence": 99,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 126,
+          "fine_time_ps": 1968,
+          "total_time_ps": 38032
+        },
+        {
+          "sequence": 100,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 126,
+          "fine_time_ps": 1968,
+          "total_time_ps": 38032
+        }
+      ],
+      "trial_index": 3
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 128,
+      "commanded_total_ps": 2285.714285714286,
+      "phase_verified": true,
+      "actual_phase_steps": 128,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 36688.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34402.28571428572,
+      "samples": [
+        {
+          "sequence": 31,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 212,
+          "fine_time_ps": 3312,
+          "total_time_ps": 36688
+        },
+        {
+          "sequence": 32,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 212,
+          "fine_time_ps": 3312,
+          "total_time_ps": 36688
+        },
+        {
+          "sequence": 33,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 212,
+          "fine_time_ps": 3312,
+          "total_time_ps": 36688
+        },
+        {
+          "sequence": 34,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 212,
+          "fine_time_ps": 3312,
+          "total_time_ps": 36688
+        },
+        {
+          "sequence": 35,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 212,
+          "fine_time_ps": 3312,
+          "total_time_ps": 36688
+        }
+      ],
+      "trial_index": 4
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 339,
+      "commanded_total_ps": 6053.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 339,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 39816.2,
+      "measured_stddev_ps": 6.4,
+      "error_ps": 33762.62857142857,
+      "samples": [
+        {
+          "sequence": 146,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 12,
+          "fine_time_ps": 187,
+          "total_time_ps": 39813
+        },
+        {
+          "sequence": 147,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 12,
+          "fine_time_ps": 187,
+          "total_time_ps": 39813
+        },
+        {
+          "sequence": 148,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 11,
+          "fine_time_ps": 171,
+          "total_time_ps": 39829
+        },
+        {
+          "sequence": 149,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 12,
+          "fine_time_ps": 187,
+          "total_time_ps": 39813
+        },
+        {
+          "sequence": 150,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 12,
+          "fine_time_ps": 187,
+          "total_time_ps": 39813
+        }
+      ],
+      "trial_index": 5
+    },
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 355,
+      "commanded_total_ps": 30339.285714285714,
+      "phase_verified": true,
+      "actual_phase_steps": 355,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 63985.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 33645.71428571429,
+      "samples": [
+        {
+          "sequence": 161,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 1,
+          "fine_time_ps": 15,
+          "total_time_ps": 63985
+        },
+        {
+          "sequence": 162,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 1,
+          "fine_time_ps": 15,
+          "total_time_ps": 63985
+        },
+        {
+          "sequence": 163,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 1,
+          "fine_time_ps": 15,
+          "total_time_ps": 63985
+        },
+        {
+          "sequence": 164,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 1,
+          "fine_time_ps": 15,
+          "total_time_ps": 63985
+        },
+        {
+          "sequence": 165,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 1,
+          "fine_time_ps": 15,
+          "total_time_ps": 63985
+        }
+      ],
+      "trial_index": 6
+    },
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 317,
+      "commanded_total_ps": 29660.714285714286,
+      "phase_verified": true,
+      "actual_phase_steps": 317,
+      "repeat_count": 5,
+      "valid_count": 4,
+      "measured_mean_ps": 63469.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 33808.28571428571,
+      "samples": [
+        {
+          "sequence": 141,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 34,
+          "fine_time_ps": 531,
+          "total_time_ps": 63469
+        },
+        {
+          "sequence": 142,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 34,
+          "fine_time_ps": 531,
+          "total_time_ps": 63469
+        },
+        {
+          "sequence": 143,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 34,
+          "fine_time_ps": 531,
+          "total_time_ps": 63469
+        },
+        {
+          "sequence": 144,
+          "status": 4,
+          "valid": false,
+          "coarse_cycles": 8,
+          "fine_raw_index": 30,
+          "fine_time_ps": 468,
+          "total_time_ps": 63532
+        },
+        {
+          "sequence": 145,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 34,
+          "fine_time_ps": 531,
+          "total_time_ps": 63469
+        }
+      ],
+      "trial_index": 7
+    },
+    {
+      "commanded_coarse_cycles": 1,
+      "commanded_phase_steps": 143,
+      "commanded_total_ps": 10553.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 143,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 44962.8,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 34409.228571428575,
+      "samples": [
+        {
+          "sequence": 46,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 194,
+          "fine_time_ps": 3031,
+          "total_time_ps": 44969
+        },
+        {
+          "sequence": 47,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 194,
+          "fine_time_ps": 3031,
+          "total_time_ps": 44969
+        },
+        {
+          "sequence": 48,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 194,
+          "fine_time_ps": 3031,
+          "total_time_ps": 44969
+        },
+        {
+          "sequence": 49,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 194,
+          "fine_time_ps": 3031,
+          "total_time_ps": 44969
+        },
+        {
+          "sequence": 50,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 196,
+          "fine_time_ps": 3062,
+          "total_time_ps": 44938
+        }
+      ],
+      "trial_index": 8
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 435,
+      "commanded_total_ps": 23767.857142857145,
+      "phase_verified": true,
+      "actual_phase_steps": 435,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 58444.2,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 34676.34285714285,
+      "samples": [
+        {
+          "sequence": 191,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 356,
+          "fine_time_ps": 5562,
+          "total_time_ps": 58438
+        },
+        {
+          "sequence": 192,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 356,
+          "fine_time_ps": 5562,
+          "total_time_ps": 58438
+        },
+        {
+          "sequence": 193,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 354,
+          "fine_time_ps": 5531,
+          "total_time_ps": 58469
+        },
+        {
+          "sequence": 194,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 356,
+          "fine_time_ps": 5562,
+          "total_time_ps": 58438
+        },
+        {
+          "sequence": 195,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 356,
+          "fine_time_ps": 5562,
+          "total_time_ps": 58438
+        }
+      ],
+      "trial_index": 9
+    },
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 21,
+      "commanded_total_ps": 24375.0,
+      "phase_verified": true,
+      "actual_phase_steps": 21,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 66969.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 42594.0,
+      "samples": [
+        {
+          "sequence": 6,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 322,
+          "fine_time_ps": 5031,
+          "total_time_ps": 66969
+        },
+        {
+          "sequence": 7,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 322,
+          "fine_time_ps": 5031,
+          "total_time_ps": 66969
+        },
+        {
+          "sequence": 8,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 322,
+          "fine_time_ps": 5031,
+          "total_time_ps": 66969
+        },
+        {
+          "sequence": 9,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 322,
+          "fine_time_ps": 5031,
+          "total_time_ps": 66969
+        },
+        {
+          "sequence": 10,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 322,
+          "fine_time_ps": 5031,
+          "total_time_ps": 66969
+        }
+      ],
+      "trial_index": 10
+    },
+    {
+      "commanded_coarse_cycles": 1,
+      "commanded_phase_steps": 246,
+      "commanded_total_ps": 12392.857142857143,
+      "phase_verified": true,
+      "actual_phase_steps": 246,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 46407.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34014.142857142855,
+      "samples": [
+        {
+          "sequence": 106,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 102,
+          "fine_time_ps": 1593,
+          "total_time_ps": 46407
+        },
+        {
+          "sequence": 107,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 102,
+          "fine_time_ps": 1593,
+          "total_time_ps": 46407
+        },
+        {
+          "sequence": 108,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 102,
+          "fine_time_ps": 1593,
+          "total_time_ps": 46407
+        },
+        {
+          "sequence": 109,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 102,
+          "fine_time_ps": 1593,
+          "total_time_ps": 46407
+        },
+        {
+          "sequence": 110,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 102,
+          "fine_time_ps": 1593,
+          "total_time_ps": 46407
+        }
+      ],
+      "trial_index": 11
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 399,
+      "commanded_total_ps": 7125.0,
+      "phase_verified": true,
+      "actual_phase_steps": 399,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 41900.6,
+      "measured_stddev_ps": 7.83836717690617,
+      "error_ps": 34775.6,
+      "samples": [
+        {
+          "sequence": 181,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 390,
+          "fine_time_ps": 6093,
+          "total_time_ps": 41907
+        },
+        {
+          "sequence": 182,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 391,
+          "fine_time_ps": 6109,
+          "total_time_ps": 41891
+        },
+        {
+          "sequence": 183,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 390,
+          "fine_time_ps": 6093,
+          "total_time_ps": 41907
+        },
+        {
+          "sequence": 184,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 390,
+          "fine_time_ps": 6093,
+          "total_time_ps": 41907
+        },
+        {
+          "sequence": 185,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 391,
+          "fine_time_ps": 6109,
+          "total_time_ps": 41891
+        }
+      ],
+      "trial_index": 12
+    },
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 179,
+      "commanded_total_ps": 27196.428571428572,
+      "phase_verified": true,
+      "actual_phase_steps": 179,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 61438.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34241.57142857143,
+      "samples": [
+        {
+          "sequence": 66,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 164,
+          "fine_time_ps": 2562,
+          "total_time_ps": 61438
+        },
+        {
+          "sequence": 67,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 164,
+          "fine_time_ps": 2562,
+          "total_time_ps": 61438
+        },
+        {
+          "sequence": 68,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 164,
+          "fine_time_ps": 2562,
+          "total_time_ps": 61438
+        },
+        {
+          "sequence": 69,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 164,
+          "fine_time_ps": 2562,
+          "total_time_ps": 61438
+        },
+        {
+          "sequence": 70,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 164,
+          "fine_time_ps": 2562,
+          "total_time_ps": 61438
+        }
+      ],
+      "trial_index": 13
+    },
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 132,
+      "commanded_total_ps": 26357.14285714286,
+      "phase_verified": true,
+      "actual_phase_steps": 132,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 60775.6,
+      "measured_stddev_ps": 40.14274529725141,
+      "error_ps": 34418.457142857136,
+      "samples": [
+        {
+          "sequence": 36,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 209,
+          "fine_time_ps": 3265,
+          "total_time_ps": 60735
+        },
+        {
+          "sequence": 37,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 206,
+          "fine_time_ps": 3218,
+          "total_time_ps": 60782
+        },
+        {
+          "sequence": 38,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 202,
+          "fine_time_ps": 3156,
+          "total_time_ps": 60844
+        },
+        {
+          "sequence": 39,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 209,
+          "fine_time_ps": 3265,
+          "total_time_ps": 60735
+        },
+        {
+          "sequence": 40,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 206,
+          "fine_time_ps": 3218,
+          "total_time_ps": 60782
+        }
+      ],
+      "trial_index": 14
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 292,
+      "commanded_total_ps": 21214.285714285714,
+      "phase_verified": true,
+      "actual_phase_steps": 292,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 55094.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 33879.71428571429,
+      "samples": [
+        {
+          "sequence": 121,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 58,
+          "fine_time_ps": 906,
+          "total_time_ps": 55094
+        },
+        {
+          "sequence": 122,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 58,
+          "fine_time_ps": 906,
+          "total_time_ps": 55094
+        },
+        {
+          "sequence": 123,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 58,
+          "fine_time_ps": 906,
+          "total_time_ps": 55094
+        },
+        {
+          "sequence": 124,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 58,
+          "fine_time_ps": 906,
+          "total_time_ps": 55094
+        },
+        {
+          "sequence": 125,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 58,
+          "fine_time_ps": 906,
+          "total_time_ps": 55094
+        }
+      ],
+      "trial_index": 15
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 22,
+      "commanded_total_ps": 16392.85714285714,
+      "phase_verified": true,
+      "actual_phase_steps": 22,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 58978.4,
+      "measured_stddev_ps": 12.451505933018705,
+      "error_ps": 42585.542857142864,
+      "samples": [
+        {
+          "sequence": 11,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 320,
+          "fine_time_ps": 5000,
+          "total_time_ps": 59000
+        },
+        {
+          "sequence": 12,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 322,
+          "fine_time_ps": 5031,
+          "total_time_ps": 58969
+        },
+        {
+          "sequence": 13,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 322,
+          "fine_time_ps": 5031,
+          "total_time_ps": 58969
+        },
+        {
+          "sequence": 14,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 322,
+          "fine_time_ps": 5031,
+          "total_time_ps": 58969
+        },
+        {
+          "sequence": 15,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 321,
+          "fine_time_ps": 5015,
+          "total_time_ps": 58985
+        }
+      ],
+      "trial_index": 16
+    },
+    {
+      "commanded_coarse_cycles": 1,
+      "commanded_phase_steps": 171,
+      "commanded_total_ps": 11053.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 171,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 45328.6,
+      "measured_stddev_ps": 13.865064009949611,
+      "error_ps": 34275.02857142857,
+      "samples": [
+        {
+          "sequence": 61,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 171,
+          "fine_time_ps": 2671,
+          "total_time_ps": 45329
+        },
+        {
+          "sequence": 62,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 172,
+          "fine_time_ps": 2687,
+          "total_time_ps": 45313
+        },
+        {
+          "sequence": 63,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 172,
+          "fine_time_ps": 2687,
+          "total_time_ps": 45313
+        },
+        {
+          "sequence": 64,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 170,
+          "fine_time_ps": 2656,
+          "total_time_ps": 45344
+        },
+        {
+          "sequence": 65,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 170,
+          "fine_time_ps": 2656,
+          "total_time_ps": 45344
+        }
+      ],
+      "trial_index": 17
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 345,
+      "commanded_total_ps": 22160.714285714286,
+      "phase_verified": true,
+      "actual_phase_steps": 345,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 55894.2,
+      "measured_stddev_ps": 15.67673435381234,
+      "error_ps": 33733.48571428571,
+      "samples": [
+        {
+          "sequence": 151,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 6,
+          "fine_time_ps": 93,
+          "total_time_ps": 55907
+        },
+        {
+          "sequence": 152,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 8,
+          "fine_time_ps": 125,
+          "total_time_ps": 55875
+        },
+        {
+          "sequence": 153,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 8,
+          "fine_time_ps": 125,
+          "total_time_ps": 55875
+        },
+        {
+          "sequence": 154,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 6,
+          "fine_time_ps": 93,
+          "total_time_ps": 55907
+        },
+        {
+          "sequence": 155,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 6,
+          "fine_time_ps": 93,
+          "total_time_ps": 55907
+        }
+      ],
+      "trial_index": 18
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 185,
+      "commanded_total_ps": 3303.5714285714284,
+      "phase_verified": true,
+      "actual_phase_steps": 185,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 37556.8,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 34253.228571428575,
+      "samples": [
+        {
+          "sequence": 71,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 156,
+          "fine_time_ps": 2437,
+          "total_time_ps": 37563
+        },
+        {
+          "sequence": 72,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 156,
+          "fine_time_ps": 2437,
+          "total_time_ps": 37563
+        },
+        {
+          "sequence": 73,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 156,
+          "fine_time_ps": 2437,
+          "total_time_ps": 37563
+        },
+        {
+          "sequence": 74,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 156,
+          "fine_time_ps": 2437,
+          "total_time_ps": 37563
+        },
+        {
+          "sequence": 75,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 158,
+          "fine_time_ps": 2468,
+          "total_time_ps": 37532
+        }
+      ],
+      "trial_index": 19
+    },
+    {
+      "commanded_coarse_cycles": 1,
+      "commanded_phase_steps": 117,
+      "commanded_total_ps": 10089.285714285714,
+      "phase_verified": true,
+      "actual_phase_steps": 117,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 49344.0,
+      "measured_stddev_ps": 3916.7379284297285,
+      "error_ps": 39254.71428571429,
+      "samples": [
+        {
+          "sequence": 26,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 222,
+          "fine_time_ps": 3468,
+          "total_time_ps": 52532
+        },
+        {
+          "sequence": 27,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 221,
+          "fine_time_ps": 3453,
+          "total_time_ps": 44547
+        },
+        {
+          "sequence": 28,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 221,
+          "fine_time_ps": 3453,
+          "total_time_ps": 52547
+        },
+        {
+          "sequence": 29,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 221,
+          "fine_time_ps": 3453,
+          "total_time_ps": 44547
+        },
+        {
+          "sequence": 30,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 221,
+          "fine_time_ps": 3453,
+          "total_time_ps": 52547
+        }
+      ],
+      "trial_index": 20
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 420,
+      "commanded_total_ps": 7500.0,
+      "phase_verified": true,
+      "actual_phase_steps": 420,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 42219.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34719.0,
+      "samples": [
+        {
+          "sequence": 186,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 370,
+          "fine_time_ps": 5781,
+          "total_time_ps": 42219
+        },
+        {
+          "sequence": 187,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 370,
+          "fine_time_ps": 5781,
+          "total_time_ps": 42219
+        },
+        {
+          "sequence": 188,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 370,
+          "fine_time_ps": 5781,
+          "total_time_ps": 42219
+        },
+        {
+          "sequence": 189,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 370,
+          "fine_time_ps": 5781,
+          "total_time_ps": 42219
+        },
+        {
+          "sequence": 190,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 370,
+          "fine_time_ps": 5781,
+          "total_time_ps": 42219
+        }
+      ],
+      "trial_index": 21
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 213,
+      "commanded_total_ps": 3803.571428571429,
+      "phase_verified": true,
+      "actual_phase_steps": 213,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 37938.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34134.42857142857,
+      "samples": [
+        {
+          "sequence": 91,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 132,
+          "fine_time_ps": 2062,
+          "total_time_ps": 37938
+        },
+        {
+          "sequence": 92,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 132,
+          "fine_time_ps": 2062,
+          "total_time_ps": 37938
+        },
+        {
+          "sequence": 93,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 132,
+          "fine_time_ps": 2062,
+          "total_time_ps": 37938
+        },
+        {
+          "sequence": 94,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 132,
+          "fine_time_ps": 2062,
+          "total_time_ps": 37938
+        },
+        {
+          "sequence": 95,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 132,
+          "fine_time_ps": 2062,
+          "total_time_ps": 37938
+        }
+      ],
+      "trial_index": 22
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 435,
+      "commanded_total_ps": 23767.857142857145,
+      "phase_verified": true,
+      "actual_phase_steps": 435,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 58431.8,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 34663.94285714286,
+      "samples": [
+        {
+          "sequence": 196,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 356,
+          "fine_time_ps": 5562,
+          "total_time_ps": 58438
+        },
+        {
+          "sequence": 197,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 356,
+          "fine_time_ps": 5562,
+          "total_time_ps": 58438
+        },
+        {
+          "sequence": 198,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 356,
+          "fine_time_ps": 5562,
+          "total_time_ps": 58438
+        },
+        {
+          "sequence": 199,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 358,
+          "fine_time_ps": 5593,
+          "total_time_ps": 58407
+        },
+        {
+          "sequence": 200,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 356,
+          "fine_time_ps": 5562,
+          "total_time_ps": 58438
+        }
+      ],
+      "trial_index": 23
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 69,
+      "commanded_total_ps": 17232.14285714286,
+      "phase_verified": true,
+      "actual_phase_steps": 69,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 59785.0,
+      "measured_stddev_ps": 6.0,
+      "error_ps": 42552.857142857145,
+      "samples": [
+        {
+          "sequence": 21,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 270,
+          "fine_time_ps": 4218,
+          "total_time_ps": 59782
+        },
+        {
+          "sequence": 22,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 270,
+          "fine_time_ps": 4218,
+          "total_time_ps": 59782
+        },
+        {
+          "sequence": 23,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 270,
+          "fine_time_ps": 4218,
+          "total_time_ps": 59782
+        },
+        {
+          "sequence": 24,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 269,
+          "fine_time_ps": 4203,
+          "total_time_ps": 59797
+        },
+        {
+          "sequence": 25,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 270,
+          "fine_time_ps": 4218,
+          "total_time_ps": 59782
+        }
+      ],
+      "trial_index": 24
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 311,
+      "commanded_total_ps": 21553.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 311,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 55375.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 33821.42857142857,
+      "samples": [
+        {
+          "sequence": 136,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 55375
+        },
+        {
+          "sequence": 137,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 55375
+        },
+        {
+          "sequence": 138,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 55375
+        },
+        {
+          "sequence": 139,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 55375
+        },
+        {
+          "sequence": 140,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 55375
+        }
+      ],
+      "trial_index": 25
+    },
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 9,
+      "commanded_total_ps": 24160.714285714286,
+      "phase_verified": true,
+      "actual_phase_steps": 9,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 66756.4,
+      "measured_stddev_ps": 7.83836717690617,
+      "error_ps": 42595.685714285704,
+      "samples": [
+        {
+          "sequence": 1,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 335,
+          "fine_time_ps": 5234,
+          "total_time_ps": 66766
+        },
+        {
+          "sequence": 2,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 336,
+          "fine_time_ps": 5250,
+          "total_time_ps": 66750
+        },
+        {
+          "sequence": 3,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 336,
+          "fine_time_ps": 5250,
+          "total_time_ps": 66750
+        },
+        {
+          "sequence": 4,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 336,
+          "fine_time_ps": 5250,
+          "total_time_ps": 66750
+        },
+        {
+          "sequence": 5,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 9,
+          "fine_raw_index": 335,
+          "fine_time_ps": 5234,
+          "total_time_ps": 66766
+        }
+      ],
+      "trial_index": 26
+    },
+    {
+      "commanded_coarse_cycles": 1,
+      "commanded_phase_steps": 374,
+      "commanded_total_ps": 14678.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 374,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 49538.2,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 34859.62857142857,
+      "samples": [
+        {
+          "sequence": 166,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 414,
+          "fine_time_ps": 6468,
+          "total_time_ps": 49532
+        },
+        {
+          "sequence": 167,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 414,
+          "fine_time_ps": 6468,
+          "total_time_ps": 49532
+        },
+        {
+          "sequence": 168,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 414,
+          "fine_time_ps": 6468,
+          "total_time_ps": 49532
+        },
+        {
+          "sequence": 169,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 414,
+          "fine_time_ps": 6468,
+          "total_time_ps": 49532
+        },
+        {
+          "sequence": 170,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 412,
+          "fine_time_ps": 6437,
+          "total_time_ps": 49563
+        }
+      ],
+      "trial_index": 27
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 310,
+      "commanded_total_ps": 5535.714285714286,
+      "phase_verified": true,
+      "actual_phase_steps": 310,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 39375.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 33839.28571428571,
+      "samples": [
+        {
+          "sequence": 131,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 39375
+        },
+        {
+          "sequence": 132,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 39375
+        },
+        {
+          "sequence": 133,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 39375
+        },
+        {
+          "sequence": 134,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 39375
+        },
+        {
+          "sequence": 135,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 40,
+          "fine_time_ps": 625,
+          "total_time_ps": 39375
+        }
+      ],
+      "trial_index": 28
+    },
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 305,
+      "commanded_total_ps": 29446.428571428572,
+      "phase_verified": true,
+      "actual_phase_steps": 305,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 63288.2,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 33841.771428571425,
+      "samples": [
+        {
+          "sequence": 126,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 46,
+          "fine_time_ps": 718,
+          "total_time_ps": 63282
+        },
+        {
+          "sequence": 127,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 46,
+          "fine_time_ps": 718,
+          "total_time_ps": 63282
+        },
+        {
+          "sequence": 128,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 46,
+          "fine_time_ps": 718,
+          "total_time_ps": 63282
+        },
+        {
+          "sequence": 129,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 44,
+          "fine_time_ps": 687,
+          "total_time_ps": 63313
+        },
+        {
+          "sequence": 130,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 46,
+          "fine_time_ps": 718,
+          "total_time_ps": 63282
+        }
+      ],
+      "trial_index": 29
+    },
+    {
+      "commanded_coarse_cycles": 3,
+      "commanded_phase_steps": 290,
+      "commanded_total_ps": 29178.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 290,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 63056.8,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 33878.228571428575,
+      "samples": [
+        {
+          "sequence": 116,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 60,
+          "fine_time_ps": 937,
+          "total_time_ps": 63063
+        },
+        {
+          "sequence": 117,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 62,
+          "fine_time_ps": 968,
+          "total_time_ps": 63032
+        },
+        {
+          "sequence": 118,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 60,
+          "fine_time_ps": 937,
+          "total_time_ps": 63063
+        },
+        {
+          "sequence": 119,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 60,
+          "fine_time_ps": 937,
+          "total_time_ps": 63063
+        },
+        {
+          "sequence": 120,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 60,
+          "fine_time_ps": 937,
+          "total_time_ps": 63063
+        }
+      ],
+      "trial_index": 30
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 207,
+      "commanded_total_ps": 19696.428571428572,
+      "phase_verified": true,
+      "actual_phase_steps": 207,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 53875.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34178.57142857143,
+      "samples": [
+        {
+          "sequence": 86,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 53875
+        },
+        {
+          "sequence": 87,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 53875
+        },
+        {
+          "sequence": 88,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 53875
+        },
+        {
+          "sequence": 89,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 53875
+        },
+        {
+          "sequence": 90,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 136,
+          "fine_time_ps": 2125,
+          "total_time_ps": 53875
+        }
+      ],
+      "trial_index": 31
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 264,
+      "commanded_total_ps": 20714.285714285714,
+      "phase_verified": true,
+      "actual_phase_steps": 264,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 54675.2,
+      "measured_stddev_ps": 6.4,
+      "error_ps": 33960.91428571429,
+      "samples": [
+        {
+          "sequence": 111,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 85,
+          "fine_time_ps": 1328,
+          "total_time_ps": 54672
+        },
+        {
+          "sequence": 112,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 85,
+          "fine_time_ps": 1328,
+          "total_time_ps": 54672
+        },
+        {
+          "sequence": 113,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 85,
+          "fine_time_ps": 1328,
+          "total_time_ps": 54672
+        },
+        {
+          "sequence": 114,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 84,
+          "fine_time_ps": 1312,
+          "total_time_ps": 54688
+        },
+        {
+          "sequence": 115,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 85,
+          "fine_time_ps": 1328,
+          "total_time_ps": 54672
+        }
+      ],
+      "trial_index": 32
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 164,
+      "commanded_total_ps": 18928.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 164,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 53219.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34290.42857142857,
+      "samples": [
+        {
+          "sequence": 56,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 178,
+          "fine_time_ps": 2781,
+          "total_time_ps": 53219
+        },
+        {
+          "sequence": 57,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 178,
+          "fine_time_ps": 2781,
+          "total_time_ps": 53219
+        },
+        {
+          "sequence": 58,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 178,
+          "fine_time_ps": 2781,
+          "total_time_ps": 53219
+        },
+        {
+          "sequence": 59,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 178,
+          "fine_time_ps": 2781,
+          "total_time_ps": 53219
+        },
+        {
+          "sequence": 60,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 178,
+          "fine_time_ps": 2781,
+          "total_time_ps": 53219
+        }
+      ],
+      "trial_index": 33
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 201,
+      "commanded_total_ps": 3589.285714285714,
+      "phase_verified": true,
+      "actual_phase_steps": 201,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 37788.0,
+      "measured_stddev_ps": 7.3484692283495345,
+      "error_ps": 34198.71428571428,
+      "samples": [
+        {
+          "sequence": 76,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 141,
+          "fine_time_ps": 2203,
+          "total_time_ps": 37797
+        },
+        {
+          "sequence": 77,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 142,
+          "fine_time_ps": 2218,
+          "total_time_ps": 37782
+        },
+        {
+          "sequence": 78,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 142,
+          "fine_time_ps": 2218,
+          "total_time_ps": 37782
+        },
+        {
+          "sequence": 79,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 142,
+          "fine_time_ps": 2218,
+          "total_time_ps": 37782
+        },
+        {
+          "sequence": 80,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 141,
+          "fine_time_ps": 2203,
+          "total_time_ps": 37797
+        }
+      ],
+      "trial_index": 34
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 153,
+      "commanded_total_ps": 2732.1428571428573,
+      "phase_verified": true,
+      "actual_phase_steps": 153,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 37094.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34361.857142857145,
+      "samples": [
+        {
+          "sequence": 51,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 186,
+          "fine_time_ps": 2906,
+          "total_time_ps": 37094
+        },
+        {
+          "sequence": 52,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 186,
+          "fine_time_ps": 2906,
+          "total_time_ps": 37094
+        },
+        {
+          "sequence": 53,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 186,
+          "fine_time_ps": 2906,
+          "total_time_ps": 37094
+        },
+        {
+          "sequence": 54,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 186,
+          "fine_time_ps": 2906,
+          "total_time_ps": 37094
+        },
+        {
+          "sequence": 55,
+          "status": 33,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 186,
+          "fine_time_ps": 2906,
+          "total_time_ps": 37094
+        }
+      ],
+      "trial_index": 35
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 393,
+      "commanded_total_ps": 7017.857142857143,
+      "phase_verified": true,
+      "actual_phase_steps": 393,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 41813.0,
+      "measured_stddev_ps": 0.0,
+      "error_ps": 34795.142857142855,
+      "samples": [
+        {
+          "sequence": 176,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 41813
+        },
+        {
+          "sequence": 177,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 41813
+        },
+        {
+          "sequence": 178,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 41813
+        },
+        {
+          "sequence": 179,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 41813
+        },
+        {
+          "sequence": 180,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 6,
+          "fine_raw_index": 396,
+          "fine_time_ps": 6187,
+          "total_time_ps": 41813
+        }
+      ],
+      "trial_index": 36
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 349,
+      "commanded_total_ps": 22232.142857142855,
+      "phase_verified": true,
+      "actual_phase_steps": 349,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 55944.4,
+      "measured_stddev_ps": 7.83836717690617,
+      "error_ps": 33712.25714285715,
+      "samples": [
+        {
+          "sequence": 156,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 4,
+          "fine_time_ps": 62,
+          "total_time_ps": 55938
+        },
+        {
+          "sequence": 157,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 3,
+          "fine_time_ps": 46,
+          "total_time_ps": 55954
+        },
+        {
+          "sequence": 158,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 3,
+          "fine_time_ps": 46,
+          "total_time_ps": 55954
+        },
+        {
+          "sequence": 159,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 4,
+          "fine_time_ps": 62,
+          "total_time_ps": 55938
+        },
+        {
+          "sequence": 160,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 7,
+          "fine_raw_index": 4,
+          "fine_time_ps": 62,
+          "total_time_ps": 55938
+        }
+      ],
+      "trial_index": 37
+    },
+    {
+      "commanded_coarse_cycles": 2,
+      "commanded_phase_steps": 39,
+      "commanded_total_ps": 16696.428571428572,
+      "phase_verified": true,
+      "actual_phase_steps": 39,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 59368.8,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 42672.37142857143,
+      "samples": [
+        {
+          "sequence": 16,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 296,
+          "fine_time_ps": 4625,
+          "total_time_ps": 59375
+        },
+        {
+          "sequence": 17,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 298,
+          "fine_time_ps": 4656,
+          "total_time_ps": 59344
+        },
+        {
+          "sequence": 18,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 296,
+          "fine_time_ps": 4625,
+          "total_time_ps": 59375
+        },
+        {
+          "sequence": 19,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 296,
+          "fine_time_ps": 4625,
+          "total_time_ps": 59375
+        },
+        {
+          "sequence": 20,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 8,
+          "fine_raw_index": 296,
+          "fine_time_ps": 4625,
+          "total_time_ps": 59375
+        }
+      ],
+      "trial_index": 38
+    },
+    {
+      "commanded_coarse_cycles": 0,
+      "commanded_phase_steps": 241,
+      "commanded_total_ps": 4303.571428571428,
+      "phase_verified": true,
+      "actual_phase_steps": 241,
+      "repeat_count": 5,
+      "valid_count": 5,
+      "measured_mean_ps": 38337.8,
+      "measured_stddev_ps": 12.4,
+      "error_ps": 34034.228571428575,
+      "samples": [
+        {
+          "sequence": 101,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 106,
+          "fine_time_ps": 1656,
+          "total_time_ps": 38344
+        },
+        {
+          "sequence": 102,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 108,
+          "fine_time_ps": 1687,
+          "total_time_ps": 38313
+        },
+        {
+          "sequence": 103,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 106,
+          "fine_time_ps": 1656,
+          "total_time_ps": 38344
+        },
+        {
+          "sequence": 104,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 106,
+          "fine_time_ps": 1656,
+          "total_time_ps": 38344
+        },
+        {
+          "sequence": 105,
+          "status": 1,
+          "valid": true,
+          "coarse_cycles": 5,
+          "fine_raw_index": 106,
+          "fine_time_ps": 1656,
+          "total_time_ps": 38344
+        }
+      ],
+      "trial_index": 39
+    }
+  ]
+}
