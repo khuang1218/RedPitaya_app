@@ -674,6 +674,58 @@ int rp_TdcGetMode(rp_tdc_mode_t* mode);
  * DIO2_P is reserved input-only in the custom image, regardless of selection. */
 int rp_TdcSetInput(rp_tdc_input_t input);
 int rp_TdcGetInput(rp_tdc_input_t* input);
+
+/** PCB pulse-width bursts (TDC v5+ / PWB v1; v6 capacity 16384). Initial trigger limit
+ * 1 MHz, 50% drive; 250 MHz sampler. HIGH and LOW >=8 ns for reliable coarse
+ * capture. Start pulse_gen before ARM. Reads follow burst completion; a burst
+ * of N uses N+1 trigger edges. ARM sets the stopped-trigger timeout from the
+ * pulse period; an output stopped mid-burst is reported, not silently ignored.
+ * Old TDC calibration tables do not calibrate this separate carry path. */
+#define RP_TDC_WIDTH_VALID          (1u << 0)
+#define RP_TDC_WIDTH_NO_RISE        (1u << 1)
+#define RP_TDC_WIDTH_NO_FALL        (1u << 2)
+#define RP_TDC_WIDTH_HIGH_AT_START  (1u << 3)
+#define RP_TDC_WIDTH_EXTRA_EDGES    (1u << 4)
+#define RP_TDC_WIDTH_TRIGGER_TIMEOUT (1u << 5)
+#define RP_TDC_WIDTH_FINE_INVALID   (1u << 7)
+#define RP_TDC_WIDTH_COARSE_ONLY    (1u << 8)
+#define RP_TDC_WIDTH_CALIBRATED     (1u << 9)
+#define RP_TDC_WIDTH_BOUNDARY       (1u << 10)
+#define RP_TDC_WIDTH_SATURATED      (1u << 11)
+#define RP_TDC_WIDTH_OUT_OF_RANGE   (1u << 12)
+#define RP_TDC_WIDTH_BUSY           (1u << 0)
+#define RP_TDC_WIDTH_CAPTURING      (1u << 1)
+#define RP_TDC_WIDTH_PROCESSING     (1u << 2)
+#define RP_TDC_WIDTH_DONE           (1u << 3)
+#define RP_TDC_WIDTH_TIMEOUT        (1u << 4)
+#define RP_TDC_WIDTH_RATE_ERROR     (1u << 5)
+#define RP_TDC_WIDTH_ABORTED        (1u << 6)
+#define RP_TDC_WIDTH_OVERFLOW       (1u << 7)
+typedef struct {
+    uint32_t cycle_id;
+    uint32_t flags;
+    uint32_t coarse_ticks;
+    uint16_t rise_raw;
+    uint16_t fall_raw;
+    uint32_t width_ps;
+} rp_tdc_width_result_t;
+int rp_TdcWidthArm(uint32_t count);
+int rp_TdcWidthAbort(void);
+int rp_TdcWidthClear(void);
+int rp_TdcWidthGetStatus(uint32_t* status);
+int rp_TdcWidthGetCount(uint32_t* count);
+int rp_TdcWidthGetCapacity(uint32_t* count);
+int rp_TdcWidthGetTick(uint32_t* tick_ps);
+int rp_TdcWidthSetTimeout(uint32_t fast_clock_cycles);
+int rp_TdcWidthGetTimeout(uint32_t* fast_clock_cycles);
+int rp_TdcWidthRead(uint32_t start, rp_tdc_width_result_t* results, uint32_t count);
+/** falling=false: leading edge LUT; true: trailing edge LUT. Both tables must
+ * be fully written before activation. Edits, FPGA reset and input changes
+ * disable correction. Values are calibrated propagation times, in ps. */
+int rp_TdcWidthWriteLut(bool falling, uint32_t start, const uint16_t* values, uint32_t count);
+int rp_TdcWidthReadLut(bool falling, uint32_t start, uint16_t* values, uint32_t count);
+int rp_TdcWidthActivateCalibration(bool enable);
+int rp_TdcWidthGetCalibration(bool* enable);
 int rp_TdcSetLaunchPeriod(uint32_t cycles);
 int rp_TdcGetLaunchPeriod(uint32_t* cycles);
 int rp_TdcSetLaunchWidth(uint32_t cycles);

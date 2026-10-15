@@ -132,6 +132,106 @@ scpi_result_t RP_TdcInputQ(scpi_t* context) {
     return SCPI_RES_OK;
 }
 
+scpi_result_t RP_TdcWidthArm(scpi_t* context) {
+    uint32_t count = 0;
+    if (!tdc_param_u32(context, &count, "Missing pulse-width burst length.")) return SCPI_RES_ERR;
+    int result = rp_TdcWidthArm(count);
+    return result == RP_OK ? SCPI_RES_OK :
+        tdc_error(context, result, "Width ARM requires v5+, legacy TDC OFF and pulse_gen ON at <=1 MHz, 50% duty", false);
+}
+scpi_result_t RP_TdcWidthAbort(scpi_t* context) {
+    int result = rp_TdcWidthAbort();
+    return result == RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width abort failed",false);
+}
+scpi_result_t RP_TdcWidthClear(scpi_t* context) {
+    int result = rp_TdcWidthClear();
+    return result == RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width clear failed",false);
+}
+scpi_result_t RP_TdcWidthStatusQ(scpi_t* context) {
+    uint32_t v=0; int result=rp_TdcWidthGetStatus(&v);
+    return tdc_u32(context,result,v,"Width status failed");
+}
+scpi_result_t RP_TdcWidthCountQ(scpi_t* context) {
+    uint32_t v=0; int result=rp_TdcWidthGetCount(&v);
+    return tdc_u32(context,result,v,"Width count failed");
+}
+scpi_result_t RP_TdcWidthCapacityQ(scpi_t* context) {
+    uint32_t v=0; int result=rp_TdcWidthGetCapacity(&v);
+    return tdc_u32(context,result,v,"Width capacity failed");
+}
+scpi_result_t RP_TdcWidthTickQ(scpi_t* context) {
+    uint32_t v=0; int result=rp_TdcWidthGetTick(&v);
+    return tdc_u32(context,result,v,"Width tick failed");
+}
+scpi_result_t RP_TdcWidthTimeout(scpi_t* context) {
+    uint32_t v=0;
+    if(!tdc_param_u32(context,&v,"Missing fast-clock timeout.")) return SCPI_RES_ERR;
+    int result=rp_TdcWidthSetTimeout(v);
+    return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width timeout failed",false);
+}
+scpi_result_t RP_TdcWidthTimeoutQ(scpi_t* context) {
+    uint32_t v=0; int result=rp_TdcWidthGetTimeout(&v);
+    return tdc_u32(context,result,v,"Width timeout query failed");
+}
+scpi_result_t RP_TdcWidthDataQ(scpi_t* context) {
+    uint32_t start=0,count=0;
+    if(!tdc_param_u32(context,&start,"Missing width start index.") ||
+       !tdc_param_u32(context,&count,"Missing width record count.")) return SCPI_RES_ERR;
+    if(count==0 || count>128) return tdc_error(context,RP_EOOR,"Read 1..128 width records per query",true);
+    std::vector<rp_tdc_width_result_t> records(count);
+    int result=rp_TdcWidthRead(start,records.data(),count);
+    if(result!=RP_OK) return tdc_error(context,result,"Width read failed",true);
+    std::ostringstream response;
+    for(uint32_t i=0;i<count;++i) {
+        if(i) response<<';';
+        const auto& r=records[i];
+        response<<r.cycle_id<<','<<r.flags<<','<<r.coarse_ticks<<','
+                <<r.rise_raw<<','<<r.fall_raw<<','<<r.width_ps;
+    }
+    SCPI_ResultMnemonic(context,response.str().c_str());
+    return SCPI_RES_OK;
+}
+static const scpi_choice_def_t scpi_WidthEdge[] = {
+    {"RISE",0},{"FALL",1},SCPI_CHOICE_LIST_END
+};
+scpi_result_t RP_TdcWidthLutWrite(scpi_t* context) {
+    int32_t edge=0; uint32_t start=0,value=0;
+    if(!SCPI_ParamChoice(context,scpi_WidthEdge,&edge,true) ||
+       !tdc_param_u32(context,&start,"Missing width LUT start index.")) return SCPI_RES_ERR;
+    std::vector<uint16_t> values;
+    while(SCPI_ParamUInt32(context,&value,false)) {
+        if(value>UINT16_MAX || values.size()>=512) return SCPI_RES_ERR;
+        values.push_back((uint16_t)value);
+    }
+    if(values.empty() || SCPI_ParamErrorOccurred(context)) return SCPI_RES_ERR;
+    int result=rp_TdcWidthWriteLut(edge!=0,start,values.data(),(uint32_t)values.size());
+    return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width LUT upload failed",false);
+}
+scpi_result_t RP_TdcWidthLutReadQ(scpi_t* context) {
+    int32_t edge=0; uint32_t start=0,count=0;
+    if(!SCPI_ParamChoice(context,scpi_WidthEdge,&edge,true) ||
+       !tdc_param_u32(context,&start,"Missing width LUT start index.") ||
+       !tdc_param_u32(context,&count,"Missing width LUT count.")) return SCPI_RES_ERR;
+    if(count==0 || count>512) return tdc_error(context,RP_EOOR,"Invalid width LUT count",true);
+    std::vector<uint16_t> values(count);
+    int result=rp_TdcWidthReadLut(edge!=0,start,values.data(),count);
+    if(result!=RP_OK) return tdc_error(context,result,"Width LUT read failed",true);
+    std::ostringstream response;
+    for(uint32_t i=0;i<count;++i) {if(i) response<<','; response<<values[i];}
+    SCPI_ResultMnemonic(context,response.str().c_str());return SCPI_RES_OK;
+}
+scpi_result_t RP_TdcWidthCalibration(scpi_t* context) {
+    scpi_bool_t enable=FALSE;
+    if(!SCPI_ParamBool(context,&enable,true)) return SCPI_RES_ERR;
+    int result=rp_TdcWidthActivateCalibration(enable);
+    return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width calibration selection failed",false);
+}
+scpi_result_t RP_TdcWidthCalibrationQ(scpi_t* context) {
+    bool enabled=false;int result=rp_TdcWidthGetCalibration(&enabled);
+    if(result!=RP_OK) return tdc_error(context,result,"Width calibration query failed",true);
+    SCPI_ResultBool(context,enabled);return SCPI_RES_OK;
+}
+
 scpi_result_t RP_TdcTrigger(scpi_t* context) {
     int result = rp_TdcTrigger();
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to trigger TDC", false);

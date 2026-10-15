@@ -46,6 +46,21 @@
 #define TDC_MMCM_COARSE_DLY_OFFSET 0x88u
 #define TDC_MMCM_PHASE_CNT_OFFSET 0x8cu
 #define TDC_INPUT_SELECT_OFFSET   0x90u
+#define TDC_WIDTH_ID              0x100u
+#define TDC_WIDTH_COMMAND         0x104u
+#define TDC_WIDTH_STATUS          0x108u
+#define TDC_WIDTH_REQUEST_COUNT   0x10cu
+#define TDC_WIDTH_CAPACITY        0x110u
+#define TDC_WIDTH_COUNT           0x114u
+#define TDC_WIDTH_INDEX           0x118u
+#define TDC_WIDTH_RECORD          0x11cu
+#define TDC_WIDTH_TICK            0x12cu
+#define TDC_WIDTH_TIMEOUT         0x130u
+#define TDC_WIDTH_PS              0x134u
+#define TDC_WIDTH_LUT_ADDR         0x138u
+#define TDC_WIDTH_LUT_DATA         0x13cu
+#define TDC_WIDTH_LUT_CONTROL      0x140u
+#define TDC_WIDTH_MIN_PERIOD       0x144u
 
 #define TDC_ID_MASK               0xffffff00u
 #define TDC_ID_EXPECTED           0x54444300u
@@ -241,6 +256,144 @@ int rp_TdcGetInput(rp_tdc_input_t* input) {
         return RP_EIPV;
     *input = (rp_tdc_input_t)value;
     return RP_OK;
+}
+
+static int tdc_CheckWidth() {
+    int result = tdc_CheckMap();
+    if (result != RP_OK) return result;
+    uint32_t id = tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET);
+    if ((id & TDC_ID_MASK) != TDC_ID_EXPECTED || (id & 0xffu) < 5u)
+        return RP_EUF;
+    return tdc_ReadRegSettled(TDC_WIDTH_ID) == 0x50574201u ? RP_OK : RP_EUF;
+}
+
+static int tdc_WidthIdle() {
+    int result = tdc_CheckWidth();
+    if (result != RP_OK) return result;
+    return (tdc_ReadRegSettled(TDC_WIDTH_STATUS) & RP_TDC_WIDTH_BUSY) ? RP_EIPV : RP_OK;
+}
+
+static int tdc_WidthValue(uint32_t offset, uint32_t* value) {
+    if (value == NULL) return RP_UIA;
+    int result = tdc_CheckWidth();
+    if (result != RP_OK) return result;
+    *value = tdc_ReadRegSettled(offset);
+    return RP_OK;
+}
+int rp_TdcWidthGetStatus(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_STATUS, v); }
+int rp_TdcWidthGetCount(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_COUNT, v); }
+int rp_TdcWidthGetCapacity(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_CAPACITY, v); }
+int rp_TdcWidthGetTick(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_TICK, v); }
+int rp_TdcWidthGetTimeout(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_TIMEOUT, v); }
+
+int rp_TdcWidthArm(uint32_t count) {
+    int result = tdc_WidthIdle();
+    if (result != RP_OK) return result;
+    if (count == 0 || count > tdc_ReadRegSettled(TDC_WIDTH_CAPACITY)) return RP_EOOR;
+    if ((tdc_ReadRegSettled(TDC_CONTROL_OFFSET) &
+         (TDC_CTRL_ENABLE | TDC_CTRL_INTERNAL_TEST | TDC_CTRL_MMCM_SWEEP)) ||
+        (tdc_ReadRegSettled(TDC_STATUS_OFFSET) & RP_TDC_STATUS_BUSY)) return RP_EIPV;
+    uint64_t period = 0, high = 0;
+    result = rp_PulseGetTiming(&period, &high);
+    if (result != RP_OK) return result;
+    if (period < tdc_ReadRegSettled(TDC_WIDTH_MIN_PERIOD) || high * 2u != period)
+        return RP_EOOR;
+    bool pulse_enabled = false;
+    result = rp_PulseGetEnabled(&pulse_enabled);
+    if (result != RP_OK) return result;
+    if (!pulse_enabled) return RP_EIPV;
+    // Allow two periods for starting/stopped-trigger watchdog, with margin.
+    uint64_t timeout = period / 2u + 32u; // 2*period / 4 ns
+    if (timeout > UINT32_MAX) return RP_EOOR;
+    pthread_mutex_lock(&tdc_mutex);
+    result = tdc_WidthIdle();
+    if (result == RP_OK) {
+        tdc_WriteReg(TDC_WIDTH_TIMEOUT, (uint32_t)timeout);
+        tdc_WriteReg(TDC_WIDTH_REQUEST_COUNT, count);
+        tdc_WriteReg(TDC_WIDTH_COMMAND, 1u);
+    }
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+
+int rp_TdcWidthAbort(void) {
+    int result = tdc_CheckWidth();
+    if (result == RP_OK) tdc_WriteReg(TDC_WIDTH_COMMAND, 2u);
+    return result;
+}
+
+int rp_TdcWidthClear(void) {
+    int result = tdc_WidthIdle();
+    if (result == RP_OK) tdc_WriteReg(TDC_WIDTH_COMMAND, 4u);
+    return result;
+}
+
+int rp_TdcWidthSetTimeout(uint32_t cycles) {
+    if (cycles == 0) return RP_EOOR;
+    int result = tdc_WidthIdle();
+    if (result == RP_OK) tdc_WriteReg(TDC_WIDTH_TIMEOUT, cycles);
+    return result;
+}
+
+int rp_TdcWidthRead(uint32_t start, rp_tdc_width_result_t* values, uint32_t count) {
+    if (values == NULL && count) return RP_UIA;
+    pthread_mutex_lock(&tdc_mutex);
+    int result = tdc_WidthIdle();
+    if (result == RP_OK) {
+        uint32_t available = tdc_ReadRegSettled(TDC_WIDTH_COUNT);
+        if (start > available || count > available - start) result = RP_EOOR;
+    }
+    for (uint32_t i = 0; result == RP_OK && i < count; ++i) {
+        tdc_WriteReg(TDC_WIDTH_INDEX, start + i);
+        // Address and synchronous BRAM read settle before the record is read.
+        (void)tdc_ReadRegSettled(TDC_WIDTH_INDEX);
+        values[i].cycle_id = tdc_ReadRegSettled(TDC_WIDTH_RECORD);
+        values[i].flags = tdc_ReadRegSettled(TDC_WIDTH_RECORD + 4u);
+        values[i].coarse_ticks = tdc_ReadRegSettled(TDC_WIDTH_RECORD + 8u);
+        uint32_t raw = tdc_ReadRegSettled(TDC_WIDTH_RECORD + 12u);
+        values[i].rise_raw = raw & 0xffffu;
+        values[i].fall_raw = raw >> 16;
+        values[i].width_ps = tdc_ReadRegSettled(TDC_WIDTH_PS);
+    }
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+
+static int tdc_WidthLut(bool falling, uint32_t start, uint16_t* values,
+                         const uint16_t* write_values, uint32_t count) {
+    pthread_mutex_lock(&tdc_mutex);
+    int result = tdc_WidthIdle();
+    uint32_t taps = result == RP_OK ? tdc_ReadRegSettled(TDC_NUM_TAPS_OFFSET) : 0;
+    if (result == RP_OK && (start > taps || count > taps - start)) result = RP_EOOR;
+    for (uint32_t i = 0; result == RP_OK && i < count; ++i) {
+        tdc_WriteReg(TDC_WIDTH_LUT_ADDR, (falling ? taps : 0u) + start + i);
+        if (write_values) tdc_WriteReg(TDC_WIDTH_LUT_DATA, write_values[i]);
+        else values[i] = (uint16_t)tdc_ReadRegSettled(TDC_WIDTH_LUT_DATA);
+    }
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+int rp_TdcWidthWriteLut(bool fall, uint32_t start, const uint16_t* v, uint32_t count) {
+    if (v == NULL && count) return RP_UIA;
+    return tdc_WidthLut(fall, start, NULL, v, count);
+}
+int rp_TdcWidthReadLut(bool fall, uint32_t start, uint16_t* v, uint32_t count) {
+    if (v == NULL && count) return RP_UIA;
+    return tdc_WidthLut(fall, start, v, NULL, count);
+}
+int rp_TdcWidthActivateCalibration(bool enable) {
+    int result = tdc_WidthIdle();
+    if (result != RP_OK) return result;
+    if (enable && !(tdc_ReadRegSettled(TDC_WIDTH_LUT_CONTROL) & 4u)) return RP_EIPV;
+    tdc_WriteReg(TDC_WIDTH_LUT_CONTROL, enable ? 2u : 4u);
+    return !!(tdc_ReadRegSettled(TDC_WIDTH_LUT_CONTROL) & 1u) == enable ? RP_OK : RP_EIPV;
+}
+int rp_TdcWidthGetCalibration(bool* enable) {
+    if (enable == NULL) return RP_UIA;
+    uint32_t value = 0;
+    int result = tdc_WidthValue(TDC_WIDTH_LUT_CONTROL, &value);
+    if (result == RP_OK) *enable = (value & 1u) != 0;
+    return result;
 }
 
 static int tdc_SetNonzero(uint32_t offset, uint32_t value) {

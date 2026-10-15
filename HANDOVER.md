@@ -1,15 +1,15 @@
 # Red Pitaya master handover
 
-Updated: 2026-10-14. Target: STEMlab 125-14 Z7020 Gen 2 / Z20_G2, xc7z020clg400-1; existing Vivado project uses 2020.1.
+Updated: 2026-10-15. Target: STEMlab 125-14 Z7020 Gen 2 / Z20_G2, xc7z020clg400-1; existing Vivado project uses 2020.1.
 
 This is the authoritative workspace handover for BNET, the LVDS CARRY4 TDC, and the single-channel GPIO pulse generator. It replaces the separate BNET and pulse handovers. Repository source, public headers, command tables and the TDC register specification remain the detailed interface references.
 
 ## 1. Current objective and working rules
 
-The current objective is pulse generation and initial external TDC operation, while supplying an external PCB from the dedicated 3.3 V power pins. The merged top retains BNET, TDC and pulse logic.
+The current objective is low-frequency testing of the PCB's voltage-dependent pulse duration while supplying it from dedicated 3.3 V power pins. Interface v6 expands finite pulse-width capture to 16384 records using online encoding and compact storage, retaining the initial 1 MHz limit. Legacy TDC commands retain launch-to-return timing. The new FPGA image, API and SCPI server still require the user's external Vivado build, deployment and board tests.
 
 - **Do not run Vivado on this device unless the user changes that instruction.** The recorded local HDL checks used Slang and Icarus.
-- Preserve the existing TDC instance, E3 allocation, dedicated MMCM, BNET datapaths and shared bus decoder when transferring changes.
+- Preserve BNET, pulse generation and shared bus addressing when transferring changes. The newly requested PCB pulse-width redesign is authorized to replace the TDC measurement controller/encoder and its interfaces; preserve useful input selection and calibration/self-test support where applicable. Document any changed hierarchy, placement selectors and register/version semantics.
 - Pulse-only testing may skip generating a new TDC placement XDC. Keep the TDC timing XDC and any existing placement constraints if TDC remains instantiated. Full implementation timing/DRC checks still apply.
 - Before accepting TDC measurements from a new bitstream, revisit placement, routed behavior and calibration.
 - The user built and loaded a merged image on 2026-10-14. It exposed BNET and TDC, but pulse reads returned zero. The subsequent pulse readback fix in this repository has not been rebuilt or deployed, and the pulse waveform has not been electrically measured.
@@ -56,6 +56,12 @@ These results include the original documentation consolidation and the later pul
 | Pulse regression | Icarus 12.0 PASS with portable ODDR model, and separately with installed Xilinx UNISIM ODDR source plus glbl | No Vivado/XSim invocation; no physical edge-speed proof |
 | Pulse bus readback fix, 2026-10-14 | Delayed-read regression failed before the RTL fix and passed with both Icarus ODDR variants afterward | The corrected RTL has not been copied into the saved Vivado project, built or loaded |
 | Timing repair, 2026-10-14 | Revised pulse regression PASS with both ODDR models; BNET scheduler/snapshot test PASS; TDC full controller/register/FIFO integration PASS with ideal taps; selected top hierarchy Slang 0 errors, 2 existing SDF warnings; Tcl collection/placement tests PASS against mocked objects | No new synthesis/route; full PS/IP/vendor elaboration and hardware timing remain unverified |
+| PCB width burst implementation, 2026-10-15 | Icarus PASS for both edge captures, varying widths, full buffer, coarse and synthetic rise/fall LUT results, missing/extra edges, constant HIGH, sub-sample pulse rejection, lost triggers, timestamp wrap, abort/rearm and delayed reads; selected merged top Slang 0 errors, 2 existing SDF warnings; project-copy/constraint/placement Tcl checks PASS with mocked objects | Ideal uniform tap delays and reduced test capacity; no physical carry calibration, metastability, full vendor elaboration, resource or routed timing acceptance |
+| Width RAM inference repair, 2026-10-15 | Single write-port RTL; Icarus PASS for trigger-boundary rise/next-address and fall writes, integrated TDC, and a full production 512-tap / 1024-record burst with every result checked; merged top Slang 0 errors, 2 existing BNET warnings | Repairs the unsupported source access pattern reported by external Vivado synthesis; local simulation does not prove Vivado BRAM inference, utilization or timing. External synthesis rerun is pending |
+| V6 16384-record width capture, 2026-10-15 | Icarus PASS for a full production 512-tap / 16384-record burst at 1 MHz, all results checked, online capture/processing overlap; small-burst error/LUT/boundary/abort tests and forced ring-overflow recovery PASS; encoder matches an independent reference for all 65536 16-tap patterns plus 17/512-tap cases; selected merged top Slang 0 errors, 2 existing BNET warnings | Ideal delays, not physical carry calibration or metastability; no Vivado run here. New grouped encoder timing, BRAM inference/total utilization and board operation remain external acceptance gates |
+| V6 software readout, 2026-10-15 | Actual API/SCPI host regression PASS for 16384 ARM, last-record read, capacity/overflow and guards; Python mocked-client tests PASS for chunk boundaries through 16384 records, full CSV, old-image capacity rejection and cleanup | Mock MMIO/client and Windows host shims; no live board or ARM/Linux build in this session |
+| Width API/SCPI, 2026-10-15 | Standalone host build/test PASS using the actual API and SCPI handlers with pinned scpi-parser; checks feature versions, busy/rate/duty guards, record decoding and invalid parameters | Mock MMIO and Windows host shims; matching Linux/ARM API/server build and live board SCPI still required |
+| Width board-test script, 2026-10-15 | Python syntax and mocked-client sequence PASS: source ON before ARM, chunked record reads, CSV output, invalid-result rejection and output-OFF/abort cleanup | No board connection or electrical measurement |
 | Existing TDC logic/MMCM regression | Icarus PASS with UNISIM MMCME2_ADV/BUFG source models | Encoder/FIFO/controller/self-test behavior; no physical carry-delay or absolute phase proof |
 | Shared decoder | Extracted current decoder and pulse instance passed all 16 subregions, WEN/REN isolation, readback and error cases | BNET/TDC responses were registered probes, not full accelerator/measurement models |
 | Pulse software | Earlier native Windows GCC 16.2 C++20 syntax checks against repository headers and scpi-parser 4e879901b51cbb43dab36dd83f95a23f1dbaa4c0; Python AST and --help passed | Windows shims were used; latest Linux/ARM build, linking and live MMIO/SCPI remain unverified |
@@ -195,7 +201,74 @@ Use the current SDF/capture notebook for banks and runtime lengths. Older DDR/pi
 
 ## 7. TDC architecture, measured history and outstanding work
 
-The TDC uses 128 explicit CARRY4 cells, 512 sampling FDREs, an iterative bubble-filtering encoder, coarse/fine arithmetic, a 256-entry result FIFO, histogram and double-buffered calibration LUT.
+The legacy TDC uses 128 explicit CARRY4 cells, 512 sampling FDREs, an iterative bubble-filtering encoder, coarse/fine arithmetic, a 256-entry result FIFO, histogram and double-buffered calibration LUT.
+
+### Confirmed PCB behavior and pending redesign
+
+The user verified that the PCB converts analogue voltage into a digital pulse train. FPGA output pulses trigger its operation; the analogue voltage seen at the trigger rising edge controls PCB output duty cycle/HIGH duration, with larger voltage producing longer pulses. The intended single-ended trigger is pulse_gen on DIO1_P (E1 contact 5); the existing selectable return inputs remain available in source.
+
+The retained legacy acquisition timestamps the PCB rising edge relative to its own E3 launch; its falling edge is used only for re-arm. Use the new TDC:WIDTH:* commands for PCB HIGH duration. The legacy external single-shot procedures below are not acceptance tests for PCB voltage-to-pulse-width conversion. E3 launch contacts 7/9 are one differential output pair and are not connected for the PCB trigger on E1 contact 5.
+
+The requested redesign should support cycle-by-cycle acquisition associated with each pulse_gen rising edge, retaining the previous result before clearing per-cycle state. A CARRY4 propagation chain is combinational and does not retain a cumulative filled count: a falling input edge propagates through it, and a pulse longer than its finite traversal delay saturates the HIGH pattern. Snapshot storage and, for a range beyond the chain delay, a coarse counter plus calibrated fine edge timing are needed. Do not treat a reset of sampling flip-flops as an instantaneous clear of the physical carry path.
+
+The user has now clarified the redesign requirements:
+
+| Requirement | Agreed value / meaning |
+|---|---|
+| Measured interval | PCB rising edge to PCB falling edge (HIGH pulse width); exclude trigger-to-PCB response delay |
+| FPGA trigger frequency | 1–125 MHz target; use the existing pulse generator and query the actual quantized frequency |
+| FPGA trigger duty | 50%; nominal HIGH/LOW range 500 ns / 500 ns at 1 MHz to 4 ns / 4 ns at 125 MHz |
+| PCB repetition | One active-HIGH output pulse per FPGA rising edge in normal operation, completing before the next trigger |
+| PCB HIGH range | Up to 100% duty; minimum detectable HIGH and LOW duration must be characterized, not inferred from a register's ps units |
+| Full-scale / missing edge | Report SATURATED / NO_FALL or other explicit invalid status when individual pulses cannot be distinguished; do not fabricate a measured width |
+| Acquisition | Capture every pulse within finite bursts, then read the buffer; continuous full-rate raw Ethernet streaming is not required |
+| Precision | Best achievable after physical implementation, calibration and measurement; no numerical ps accuracy has been accepted or demonstrated |
+| Bring-up | Start at 1 MHz and increase; 125 MHz is an unverified target for the PCB/link and FPGA capture |
+
+The initial low-frequency width implementation is now in source. The previous v4 input-selector tests do not establish its physical accuracy or throughput; use the new width tests and hardware procedure below.
+
+#### Current v6 implementation: 16384 pulse-width records
+
+- HDL: prj/v0.94/rtl/tdc_pulse_width.sv. Separate capture and processing controllers overlap acquisition and encoding. Only four raw rise/fall frames are staged; completed frames are consumed by an eight-tap-per-clock encoder before the next 1 MHz frame. The carry path stays running across trigger boundaries. The shared encoder retains its original one-tap mode by default for legacy TDC operation.
+- Current top-level TDC ID: **0x54444306** at 0x40710000. Width sub-block signature remains **0x50574201** at 0x40710100; the five-word readout/API layout is compatible with v5. Rebuild the matching API/server for the updated overflow definition; the SCPI server links the API statically. CAPACITY? distinguishes the 16384-record default from older images.
+- Width acquisition deliberately rejects trigger periods below **1000 ns** (above **1 MHz**). The API requires pulse_gen already ON, 50% drive, and legacy TDC enable/internal/MMCM modes OFF. The initial 250 MHz sampler uses a **4 ns coarse tick**; HIGH and LOW should each be at least **8 ns** for coarse capture, subject to actual board characterization. Shorter pulses/gaps may be missed or merged. This release does not implement 125 MHz acquisition.
+- Burst length is 1..16384, default 16. N records require N+1 output trigger boundaries. Encoding runs during capture; readout starts after the last frame is processed. A full 1 MHz burst covers 16.384 ms plus initial alignment/final processing. This matches the ADC's sample count, not its sample rate. It remains finite capture/readout, with gaps between bursts.
+- Storage at 512 taps is 114 bits per record (flags, coarse ticks, two 9-bit indices and width_ps), or 228 KiB for 16384 records. Cycle IDs are derived from addresses, so no public fields are dropped. The four raw staging frames use 544 bytes of logical storage, plus 2 KiB of rise/fall LUT data. Raw staging uses distributed RAM; the compact result buffer uses block RAM with one write and one synchronous read. Scaling the previous v5 raw-burst arrays directly would need about 2.44 MiB and is not the chosen implementation. Verify inference, total utilization and timing alongside BNET/scope/ASG externally.
+- Uncalibrated width is the difference between the PCB edge timestamps in 4 ns ticks. Raw carry indices and status bytes are diagnostic. Missing/extra edges, HIGH at cycle start, saturation, trigger timeout, boundary ambiguity and out-of-range results are explicit flags. A stalled processor sets global OVERFLOW (status bit 7) and discards the burst; it never silently overwrites an unread frame. CAPTURING and PROCESSING can both be set. Completed memory is frozen and can be read repeatedly.
+- Optional fine correction uses separate rise/fall LUTs for the new 250 MHz carry path: width_ps = coarse_ticks*4000 + rise_LUT - fall_LUT. Both 512-entry tables must be uploaded before activation. Editing a table or changing input disables correction; source changes also invalidate previous width records. Old 125 MHz calibration tables are not valid for this path. No automatic width calibration or certified ps accuracy is claimed.
+- New commands: TDC:WIDTH:ARM <count>, ABORT, CLEAR, STATUS?, COUNT?, CAPACITY?, TICK?, DATA? <start>,<count>, TIMEOUT[?], and CALIBRATION:LUT:WRITE/READ? / CALIBRATION:ACTIVATE[?]. DATA returns semicolon-separated records: cycle_id,flags,coarse_ticks,rise_raw,fall_raw,width_ps. Up to 128 records per query. The detailed register/flag definitions and example are in the FPGA repo's prj/v0.94/doc/tdc_registers.md.
+- Script: **scpi-tests/tdc_pulse_width_test.py BOARD_IP --count 16384 --csv tdc_width_16384.csv --quiet** (default 1 MHz / 50%, SINGLE input; count defaults to 16 when omitted). It queries hardware capacity, starts pulse_gen before ARM, polls completion, reads 128 records per query and checks IDs/flags/count. The full burst takes 128 data queries. --quiet suppresses per-pulse printing but saves every CSV record and reports validity/status. Cleanup sends output OFF / abort. Use --frequency 100000 for a slower run or --input LVDS for the differential return.
+- New carry hierarchy: i_tdc/i_width/i_carry, 128 CARRY4 / 512 FDREs, alongside the retained legacy chain. The placement helper accepts this hierarchy as an optional last argument. Use separate legal sites; no width-chain placement has been selected. The existing TDC XDC now includes the width tap/synchronizer exceptions and bounded control/completion transfers. Ordinary capture, arithmetic, RAM and encoder paths remain timed.
+- The project-copy refresh now imports all rtl/tdc_*.sv dependencies, pulse_gen, bnet_axi_reader_ch, the merged top and four XDCs. It uses project-local copies as requested. Keep all tbn carry/ODDR replacements out of Vivado filesets.
+
+**Prior synthesis failure and retained repair (2026-10-15):** v5 failed externally with Synth 8-3391 on rise_memory_reg (512 x 1024 = 524288 bits). Conditional writes to current/next-frame addresses prevented BRAM inference. The repaired source selects write enable/address/data before a single clocked write per array, with no storage reset. V6 retains that access pattern while replacing the full raw-burst arrays with shallow staging and compact results. Do not raise dissolveMemorySizeLimit to expand the array into bits. Refresh copies and reset synthesis on the build machine; no Vivado has been run here and new inference/utilization/timing remain pending.
+
+Run tb_tdc_pulse_width.FULL_SIZE=1 for the production 512-tap / 16384-record configuration, checking every record and overlap of acquisition/encoding. Default FULL_SIZE=0 covers the smaller controller/fault cases, including forced staging overflow and recovery. The grouped encoder regression exhaustively checks all 65536 16-tap inputs and also tests 17/512-tap vectors against an independent reference. Machine-local Icarus scripts/logs are under build/hdl-review/.
+
+After an externally generated image passes timing/CDC/DRC/resource checks, rebuild and deploy the matching API/server, then run:
+
+~~~text
+python scpi-tests/tdc_pulse_width_test.py 169.254.77.151 --count 16 --csv tdc_width.csv
+python scpi-tests/tdc_pulse_width_test.py 169.254.77.151 --count 16384 --csv tdc_width_16384.csv --quiet
+~~~
+
+Connect E1 pin 5 to PCB trigger, the PCB's 3.3 V return to E1 pin 7, and common ground to E1 pin 25/26. No E3 launch pair is needed. Compare valid coarse widths against an oscilloscope at several input voltages before progressing to narrow pulses or fine calibration. Initial PC/PCB operation and routed timing remain unverified here.
+
+#### Target architecture and remaining high-rate work
+
+- Use an internal pulse_gen cycle marker aligned with the ODDR output edge for cycle IDs and burst boundaries. Do not clock the controller from a GPIO output routed back through fabric or assume a delayed synchronizer marks the physical output edge exactly.
+- Keep the carry interpolation paths and coarse timebase running during a burst. At a trigger boundary, retain the previous completed cycle's record and prepare new per-cycle bookkeeping. Reset capture ownership/valid flags, not the propagation path near an arriving edge. A captured result must survive re-arm.
+- Capture PCB leading and trailing edges independently, including when both arrive within one 125 MHz clock interval. Capture must not wait for thermometer decoding or software. The old 512-clock iterative encoder cannot serve this throughput requirement.
+- Combine a coarse timestamp with calibrated fine timing for each edge, then subtract falling minus rising timestamps. A 1 MHz / near-full-scale pulse can approach 1 us, far beyond the finite traversal time of the existing carry line. Counting HIGH taps alone is insufficient.
+- Use a pipelined or buffered encoder/capture arrangement able to accept a new pulse every 8 ns at the target rate. Check clustered transitions at changing duty cycles as well as steady 50% signals; nominal sample clock frequency alone does not prove edge throughput or a minimum detectable pulse/gap.
+- Preserve correct cycle IDs across a fixed processing latency. The previous cycle's raw capture can be retained at the next trigger even if its encoded result emerges several pipeline stages later. Do not overwrite an in-flight edge pair at each trigger.
+- V6 stores up to 16384 compact results and encodes during capture at the initial <=1 MHz rate. Increasing capacity alone does not increase edge throughput. A future 125 MHz design would need substantially faster capture/encoding and transport; that rate and continuous streaming are not implemented or verified.
+- Preserve selectable LVDS and 3.3 V single-ended return routes unless a later instruction changes this. E1 DIO1_P remains the single-ended trigger output; no E3 differential launch connection is needed for this PCB protocol. Disable the independent E3 launch function in the new pulse-width acquisition mode.
+- Carry tap calibration, rising/falling polarity offsets, input route offsets, clock/coarse boundary handling and missing-code behavior require fresh characterization. A numeric value expressed in ps is not evidence of that resolution or accuracy.
+
+Acceptance work for the redesign must include simulation of long pulses, both edges in one clock interval, narrow HIGH and LOW gaps, minimum/maximum duty, adjacent cycles with sharply changing widths, full-scale constant HIGH, missing/extra edges, counter boundaries, buffer limits and delayed readout. After source checks/simulation, the user must run Vivado timing/CDC/DRC/resource checks elsewhere and then compare widths to an oscilloscope from 1 MHz upward. No Vivado is to be run here.
+
+### Retained legacy implementation
 
 - External LVDS launch to PCB: E3 contacts **7/9**, DIO17 P/N, exp_e3p_o[0]/exp_e3n_o[0], package T5/U5.
 - External LVDS return from PCB: E3 contacts **31/33**, DIO18 P/N, exp_e3p_i[0]/exp_e3n_i[0], package V11/V10. Use E3 ground contact 16, 22 or 26.
@@ -204,7 +277,7 @@ The TDC uses 128 explicit CARRY4 cells, 512 sampling FDREs, an iterative bubble-
 - E3 indices 3:1 retain one clock and two auxiliary serializer data lanes; index 0 is reserved for TDC.
 - Sources: external LVDS/SINGLE return selected by INPUT_SELECT; divided independent PS fclk[0] stimulus selected by CONTROL[10]; dedicated phase-swept MMCM stimulus selected by CONTROL[11], with MMCM priority.
 - The dedicated MMCME2_ADV is separate from the shared Red Pitaya PLL. Nominal parameters give 448 phase steps per 8 ns ADC period, about 17.86 ps per commanded step. This is a nominal stimulus setting, not certified TDC resolution.
-- Current source register ID is **0x54444304** (v4 selectable external input). The earlier board reading 0x54444303 identifies the previous v3 image. MMCM registers are at 0x80 control, 0x84 status, 0x88 coarse delay, 0x8c signed step count; INPUT_SELECT is at 0x90, relative to the TDC base.
+- Current source register ID is **0x54444306** (v6: compact 16384-width bursts plus selectable input). Earlier IDs 0x54444303/04/05 identify v3/v4/v5 images. MMCM registers are at 0x80 control, 0x84 status, 0x88 coarse delay, 0x8c signed step count; INPUT_SELECT is at 0x90, relative to the TDC base.
 - Source code now includes the fixed 128-bit FIFO layout with a 10-bit fine-raw field, the normal-operation pending-trigger latch, and the third toggle-settling stage.
 - The iterative encoder needs roughly 512 clocks per event. A 125 MHz sampling clock does not imply 125 million accepted measurements per second. No PS interrupt line is connected.
 
@@ -217,7 +290,7 @@ External selection (new source changes, not yet loaded on the board):
 - Turn TEST:INTERNAL and MMCM:ENABLE OFF for either PCB input. One external input is measured at a time. The selected rising edge is fed directly into the delay line; the existing synchronized signal is only used for re-arm. Keep the input LOW before starting and let it return LOW between acquisitions.
 - The E3 launch pair stays at contacts 7/9 for both return types. The E1 pulse generator remains a separate function; these changes do not make it the TDC start reference. A periodic unrelated PCB signal does not establish a controlled launch-to-return delay.
 - Re-characterize the selected input path and reload its calibration before calibrated use; LVDS and LVCMOS input/routing offsets differ. Wait for histogram-clear completion before collecting calibration. The stored LUT banks are not automatically replaced by a source change.
-- Rebuild/reload FPGA plus API and SCPI server; the static SCPI link embeds the API. The source-refresh helper now includes tdc_registers.sv. Verify ID 0x54444304 and query INPUT before acquisition.
+- Rebuild/reload FPGA plus API and SCPI server; the static SCPI link embeds the API. The source-refresh helper now includes all rtl/tdc_*.sv dependencies. Verify ID 0x54444306 and query INPUT before acquisition; PCB width acquisition uses TDC:WIDTH:* instead of the legacy MEASURE command.
 
 For SINGLE bring-up, use the external single-shot sequence in section 9 with `TDC:INPUT SINGLE` after RESET. Query `TDC:INPUT?` before enabling. Switch back with `TDC:INPUT LVDS` after disabling/resetting.
 
@@ -318,7 +391,7 @@ It briefly enables 1 MHz by default and finishes OFF/claimed LOW. Faster ON test
 
 These are instructions for the user on the build device, not authorization to run Vivado here.
 
-1. Back up the working project/image. In the existing GUI project, source prj/v0.94/scripts/refresh_custom_sources.tcl from this repository. It replaces the six changed module references (pulse_gen, bnet_axi_reader_ch, tdc_top, tdc_registers, tdc_mmcm_stimulus, tdc_lvds_io), selects the repository's merged red_pitaya_top_LED7_mod.sv, disables competing top source copies, refreshes the Gen2/custom XDCs, sets their implementation use and board defines, and removes SCOPE_ONLY. It does not launch runs. Retain prior ASG declaration/enum corrections.
+1. Back up the working project/image. In the existing GUI project, source prj/v0.94/scripts/refresh_custom_sources.tcl from this repository. Per the user's preference, it now uses import_files -force -norecurse -flat to copy all rtl/tdc_*.sv dependencies plus pulse_gen and bnet_axi_reader_ch, the merged red_pitaya_top_LED7_mod.sv, and the four Gen2/custom XDCs into <project>.srcs/sources_1/imports/ and <project>.srcs/constrs_1/imports/. It replaces matching file membership, selects the imported top, disables competing top source copies, sets constraint use and board defines, and removes SCOPE_ONLY. Later workspace edits require rerunning this script; project copies are not live references to the repository. It prints each imported path and does not launch runs. Retain prior ASG declaration/enum corrections.
 2. Set top module red_pitaya_top from red_pitaya_top_LED7_mod.sv; remove/disable competing top definitions in that fileset. Set Z20_G2 and Z20_xx, preserve other required defines, and leave SCOPE_ONLY absent for the full feature build. Confirm DWE=11 and PS GPIO width 33.
 3. Add/update constraints in the active constrs_1 set. Keep existing board/clock/pin XDCs and avoid duplicate imported copies:
 
@@ -327,16 +400,18 @@ These are instructions for the user on the build device, not authorization to ru
 | pulse_gen_Z20_G2.xdc | OFF | ON |
 | tdc_Z20_G2.xdc | OFF | ON |
 | bnet_reader_Z20_G2.xdc | OFF | ON |
-| tdc_placement_selected.xdc, when generated | OFF | ON |
+| tdc_placement_selected.xdc and a separate width placement XDC, when generated | OFF | ON |
 
 The two updated Z20_G2 build Tcl entry points include the pulse/TDC constraints for a non-SCOPE_ONLY v0.94 build, and include the selected-placement XDC if it exists. Existing GUI projects need their files/properties refreshed manually.
 
-4. Keep testbenches out of Design Sources. Use Xilinx UNISIM for Vivado tests. Never add tbn/pulse_gen_oddr_model.sv or tbn/tdc_carry_chain_logic_model.sv to a Vivado fileset. The latter is only an ideal tap source for the standalone controller test, not a physical TDC model.
+The project-copy refresh was checked with Tcl mocks and actual file copies in a temporary folder: all imported files matched repository bytes, a second refresh replaced a stale copy without duplicate membership, imported top/XDC properties were correct, and an existing selected-placement reference and user defines were preserved. This did not run Vivado or modify the saved project.
+
+4. Keep testbenches out of Design Sources. Use Xilinx UNISIM for Vivado tests. Never add tbn/pulse_gen_oddr_model.sv, tbn/tdc_carry_chain_logic_model.sv or tbn/tdc_carry_chain_timing_model.sv to a Vivado fileset. The latter is only an ideal tap source for the standalone controller test, not a physical TDC model.
 5. Elaborate/synthesize. Confirm i_pulse_gen, i_tdc, i_bnet_regs, one selected H16 IOBUF, the single slot-7 response driver, bus period 8 ns and pulse ser_clk period 4 ns.
-6. For the present pulse-only test, skip new TDC manual placement if desired. Vivado can automatically place its instantiated logic. Keep its existing timing/placement constraints. This does not establish calibrated TDC performance.
+6. For a standalone pulse-generator test, new TDC manual placement can be skipped. Vivado can automatically place its instantiated logic. Keep existing timing/placement constraints. This does not establish calibrated TDC performance.
 7. The placement helper now sets tap FF BEL before LOC in both the live procedure and emitted XDC. Its tap-name selector also accepts Vivado's generated gen_tap[index].i_tap_ff hierarchy. No placement coordinates were selected here.
-8. For TDC work, open the synthesized design, source prj/v0.94/scripts/tdc_placement.tcl, verify 128 CARRY4 / 512 tap FDRE cells, and choose a real legal column/start row or recover a prior working placement. Use tdc_place_chain X Y0 and tdc_report_placement; write prj/v0.94/sdc/tdc_placement_selected.xdc with tdc_write_placement_xdc. Add it to constrs_1 before controlled implementation. No selected-placement XDC was found in either working checkout or the saved Vivado project.
-9. Reset stale implementation runs, implement, and inspect timing summary, clock interaction, CDC, exceptions, DRC, I/O and hierarchical utilization. Source scripts/check_custom_constraints.tcl in the open design to verify 128 carries, 512 tap D pins, six pulse first-stage synchronizers, eight BNET first-stage synchronizers and nonempty bundled-data collections. Verify the 4 ns mailbox and 8 ns readback bounds remain effective; do not blanket-false-path the pulse clock pair. Check ODDR IOB placement and direct Q-to-IOBUF connectivity, LVCMOS33, FAST slew and the existing drive setting.
+8. For TDC work, open the synthesized design and source prj/v0.94/scripts/tdc_placement.tcl. Each chain has 128 CARRY4 / 512 tap FDRE cells: legacy i_tdc/i_carry and new width i_tdc/i_width/i_carry. Choose separate legal columns/start rows or recover a compatible prior placement. The helpers default to the legacy chain; pass i_tdc/i_width/i_carry as the final argument for the new chain. Generate separate placement XDCs, add both to constrs_1 with the properties above, and retain them with the image's calibration. Do not overwrite one chain's placement file with the other. No selected placement was found or chosen here.
+9. Reset stale implementation runs, implement, and inspect timing summary, clock interaction, CDC, exceptions, DRC, I/O and hierarchical utilization. Source scripts/check_custom_constraints.tcl in the open design to verify 128 carries / 512 tap D pins for each chain, five width, six pulse and eight BNET first-stage synchronizers, and nonempty bundled-data collections. Verify the 4 ns mailbox and 8 ns readback bounds remain effective; do not blanket-false-path the pulse clock pair. Check ODDR IOB placement and direct Q-to-IOBUF connectivity, LVCMOS33, FAST slew and the existing drive setting.
 10. Confirm RAM inference/resource use and ordinary 250 MHz pulse paths close. Produce an identifiable bitstream only after applicable checks pass. Controlled TDC placement constrains locations, not all routed delays; calibrate the resulting image.
 
 AMD constraint-order reference:
@@ -345,15 +420,15 @@ https://docs.amd.com/r/2024.2-English/ug912-vivado-properties/BEL
 AMD 7-series carry architecture:
 https://docs.amd.com/r/en-US/ug474_7Series_CLB/Carry-Logic
 
-### Timing repair and initial TDC bring-up
+### Timing repair and retained legacy delay test
 
 The saved 2026-10-14 run reported unsupported Tcl if blocks in the two custom managed XDCs; its worst -10.290 ns path ended at an asynchronous carry tap. The tap selector also assumed a slash where the synthesized generated hierarchy uses a dot. Both custom XDCs now contain supported constraint commands with no control flow, and the tap pattern is corrected. Only tap D measurement inputs and documented first synchronizer stages/reset synchronizer CLR inputs are exempt. Encoder, controller, FIFO, clocks, functional reset release and ordinary datapaths remain timed. No global asynchronous clock grouping is applied.
 
 The remaining real paths were addressed in the pulse counter and BNET scheduler/debug transfer as described above. The Gen2 E3 receive clock now uses the P pin only, fixing the previous two-source clock warning. These source changes are an attempted timing repair; they are not a timing-closure result. Refresh the files, reset old synthesis/implementation runs, rebuild and inspect the new report. Resolve any non-measurement negative slack before accepting operation.
 
-After the new image passes the applicable implementation checks:
+Use the width burst procedure in section 7 for the PCB's voltage-dependent HIGH duration. The following optional legacy test measures launch-to-return rising-edge delay and does not validate the new pulse-width function. After the new image passes the applicable implementation checks:
 
-- Verify current TDC ID 0x54444304 at 0x40710000 and NUM_TAPS 512 at 0x40710018; verify pulse ID 0x50554c01 and tick 2 as well.
+- Verify current TDC ID 0x54444306 at 0x40710000 and NUM_TAPS 512 at 0x40710018; verify pulse ID 0x50554c01 and tick 2 as well.
 - Route PCB LVDS return P/N to E3 contacts 31/33. For a controlled launch-to-return test, route E3 launch contacts 7/9 to the PCB input and supply a common ground. E1's 3.3 V pulse output requires an LVDS driver before any connection to the E3 input.
 - The user confirmed no external return termination, so RETURN_DIFF_TERM is now true and the FPGA's internal 100-ohm differential termination is enabled. Do not add another terminator in parallel.
 - Start with external single-shot mode and no LUT. Configure source selection with ENABLE OFF. The TDC generates its own launch; an unrelated free-running input does not establish a controlled delay.
@@ -414,11 +489,12 @@ Saved notebook outputs are not a fresh acceptance run. For example, the SDF note
 
 Immediate pulse/TDC work:
 
-1. Refresh all affected sources/constraints with scripts/refresh_custom_sources.tcl in the existing Vivado project. Rebuild/reload and verify both feature IDs before SCPI tests.
-2. Resolve the routed timing failures before treating the pulse output as reliable; inspect the 250 MHz phase counter and other failing path groups in the saved timing report.
-3. Wire E1 pins 1/2 for +3.3 V, 25/26 for common ground, and pin 5 for the PCB pulse input. PCB power is automatic.
-4. Run the 1 MHz smoke test, then measure voltage, period, HIGH/LOW widths, OFF/LOW and restart behavior at the actual PCB receiver.
-5. Progress to 24 ns, 8 ns and 4 ns periods only after the receiver, interconnect and measurement setup are characterized.
+1. Refresh project-local source/constraint copies with scripts/refresh_custom_sources.tcl in the existing Vivado project on the build machine. Reset the old runs, rebuild and inspect timing/CDC/DRC and utilization, including BRAM inference for the width buffer. Do not run Vivado on this laptop.
+2. Resolve the previously reported timing failures in a fresh implementation before accepting the merged image. Check the grouped encoder's ordinary 250 MHz paths and compact-result RAM inference/utilization. The updated collection checker requires RAMB primitives under i_tdc/i_width. Check both carry hierarchies and select separate legal placements before fine calibration. Local syntax/logic checks do not prove timing closure.
+3. Load the new image and rebuild/redeploy the matching API and statically linked SCPI server. Verify TDC ID 0x54444306 at 0x40710000, width ID 0x50574201 at 0x40710100, and the pulse feature ID before SCPI tests.
+4. Wire E1 pins 1/2 for +3.3 V, 25/26 for common ground, pin 5 to the PCB trigger, and the PCB's 3.3 V return to pin 7. PCB power is automatic. No E3 launch pair is needed.
+5. Run a short width test first, then scpi-tests/tdc_pulse_width_test.py BOARD_IP --count 16384 --csv tdc_width_16384.csv --quiet (1 MHz / 50%, SINGLE). Compare widths against an oscilloscope at several analogue voltages; inspect flags and verify output HIGH/LOW and restart behavior. Use --frequency 100000 for a slower run.
+6. Characterize coarse accuracy, narrow HIGH/LOW detection limits and separate rise/fall LUTs. Width acquisition above 1 MHz requires further HDL work and verification; the pulse generator's faster standalone settings do not establish TDC support at those rates.
 
 Outstanding broader work:
 
