@@ -3,7 +3,7 @@
 Trigger: DIO1_P, E1 pin 5. Return: DIO2_P, E1 pin 7 (3.3 V), or
 LVDS DIO18_P/N, E3 pins 31/33. Common ground required. Finishes output OFF.
 No external E3 launch connection is used. Default: 1 MHz, 50%, 16 records.
-TDC v6 supports 16384 records; capacity is queried from the loaded image.
+TDC v6+ supports 16384 records; capacity is queried from the loaded image.
 Uncalibrated widths use 4 ns ticks; raw carry codes are diagnostic.
 """
 import argparse

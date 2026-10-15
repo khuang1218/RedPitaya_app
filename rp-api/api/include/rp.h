@@ -675,7 +675,7 @@ int rp_TdcGetMode(rp_tdc_mode_t* mode);
 int rp_TdcSetInput(rp_tdc_input_t input);
 int rp_TdcGetInput(rp_tdc_input_t* input);
 
-/** PCB pulse-width bursts (TDC v5+ / PWB v1; v6 capacity 16384). Initial trigger limit
+/** PCB pulse-width bursts (TDC v5+ / PWB v1; v6+ capacity 16384). Initial trigger limit
  * 1 MHz, 50% drive; 250 MHz sampler. HIGH and LOW >=8 ns for reliable coarse
  * capture. Start pulse_gen before ARM. Reads follow burst completion; a burst
  * of N uses N+1 trigger edges. ARM sets the stopped-trigger timeout from the

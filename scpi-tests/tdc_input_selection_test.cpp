@@ -154,9 +154,12 @@ int main() {
     assert(rp_TdcWidthRead(16383,&record,1)==RP_OK && record.cycle_id==16384);
     assert(hw[TDC_WIDTH_INDEX/4]==16383);
     assert(rp_TdcWidthRead(16384,&record,1)==RP_EOOR);
+    hw[TDC_ID_VERSION_OFFSET/4]=0x54444307; // reduced storage preserves PWB v1
+    uint32_t width_capacity=0;
+    assert(rp_TdcWidthGetCapacity(&width_capacity)==RP_OK && width_capacity==16384);
     hw[TDC_WIDTH_STATUS/4]=RP_TDC_WIDTH_DONE|RP_TDC_WIDTH_OVERFLOW;
     uint32_t width_status=0;
     assert(rp_TdcWidthGetStatus(&width_status)==RP_OK && (width_status&RP_TDC_WIDTH_OVERFLOW));
     tdc_Release();
-    puts("PASS: TDC input and width API/SCPI; v5/v6 capacity, 16384 ARM/last-record read, overflow, busy/rate/duty guards and parameter errors");
+    puts("PASS: TDC input and width API/SCPI; v5/v6/v7 compatibility, 16384 ARM/last-record read, overflow, busy/rate/duty guards and parameter errors");
 }
