@@ -1,12 +1,12 @@
 # Red Pitaya master handover
 
-Updated: 2026-10-15. Target: STEMlab 125-14 Z7020 Gen 2 / Z20_G2, xc7z020clg400-1; existing Vivado project uses 2020.1.
+Updated: 2026-10-19. Target: STEMlab 125-14 Z7020 Gen 2 / Z20_G2, xc7z020clg400-1; existing Vivado project uses 2020.1.
 
 This is the authoritative workspace handover for BNET, the LVDS CARRY4 TDC, and the single-channel GPIO pulse generator. It replaces the separate BNET and pulse handovers. Repository source, public headers, command tables and the TDC register specification remain the detailed interface references.
 
 ## 1. Current objective and working rules
 
-The current objective is low-frequency testing of the PCB's voltage-dependent pulse duration while supplying it from dedicated 3.3 V power pins. Interface v7 retains 16384 pulse-width records and the initial 1 MHz limit while reducing result storage after the V6 implementation exceeded BRAM capacity. Legacy TDC commands retain launch-to-return timing. The new FPGA image, API and SCPI server still require the user's external Vivado build, deployment and board tests.
+The current objective is repairing timing and record integrity for testing the PCB's voltage-dependent pulse duration while supplying it from dedicated 3.3 V power pins. Interface v8 retains 16384 pulse-width records, the 99-bit result format and the initial 1 MHz limit, adding timestamp/arithmetic pipelines and explicit readout readiness. Legacy TDC commands retain launch-to-return timing. The new FPGA image, API and SCPI server still require the user's external Vivado build, deployment and board checks.
 
 - **Do not run Vivado on this device unless the user changes that instruction.** The recorded local HDL checks used Slang and Icarus.
 - For the V7 BRAM repair, the user requested skipping further simulation and will verify in Vivado. The in-flight full-buffer V7 run was stopped; do not restart it for this repair. Completed short regressions and host checks are recorded below.
@@ -395,6 +395,98 @@ It briefly enables 1 MHz by default and finishes OFF/claimed LOW. Faster ON test
 
 ## 9. Existing Vivado project: transfer and constraints
 
+### 2026-10-19 follow-up: v8 timing and capture integrity (not built)
+
+The user authorized another HDL review/repair and API/SCPI changes. No newer
+routed diagnostics or sine captures are present than October 16. The loaded
+board image was explicitly identified by the user as predating the October 16
+pipeline repair. Do not attribute its measurements to the new HDL.
+
+The latest sine capture is `tdc_pcb_sine_20261016T134802_351244Z`: FPGA 100 kHz,
+analogue 1 kHz, 0.4 Vpp, 0.4 V offset. Fit amplitude 56.78 ns, RMSE 15.12 ns,
+R2 0.8757; second-harmonic fit amplitude 19.76 ns. There are 2048 missing-mode
+records, exactly cycle_id % 8 == 1, 57 VALID/frame-error conflicts, and 291
+missing FINE_INVALID flags. Excluding every eighth row barely changes sine
+RMSE (14.75 ns), so this flag fault alone does not explain the distortion.
+The coarse path has no 5 us/half-clock clamp or voltage/sine mapping; fine
+encoder indices do not alter coarse-only widths. Timing errors and a nonlinear
+PCB transfer remain separate hypotheses. No unique physical root cause is
+established by the review.
+
+Additional source changes:
+
+- Width capture now stores two raw 32-bit edge timestamps plus flags in the
+  four-slot ring (560 bytes logical). Timestamp subtraction moves out of capture
+  into two 16-bit processor stages, retaining modulo-2^32 wrap behavior.
+- Timestamp/watchdog counters use registered one-tick-early byte carries;
+  watchdog terminal equality replaces wide arithmetic comparison. LUT fetch,
+  fine subtraction, 44-bit coarse scaling and 45-bit correction are separated.
+- Encoder chunk analysis uses a balanced prefix tree. Removed the redundant
+  512-bit encoder input register and reset of the fully overwritten shift bank.
+  Filtering/status rules are unchanged; no acceptance of malformed fine codes.
+- `tdc_registers.sv` now reports **0x54444308**. PWB ID stays 0x50574201.
+  Width register **0x148 READ_READY bit 0** indicates seven bus-clock pipeline
+  settling. Updated API polls it on v8+, with old-image settling fallback.
+- API normal width reads reject inconsistent records rather than trusting
+  VALID alone. `rp_TdcWidthReadRaw` and **TDC:WIDTH:DATA:RAW? start,count** retain
+  the six hardware fields for diagnosis; **TDC:WIDTH:VERSION?** returns 8 for
+  v8. These additions require rebuilding API and statically linked SCPI server.
+  Sine helper now audits old-server records too, stores the audit in capture
+  metadata and blocks acceptance/fitting of contradictory data. Notebook adds
+  audit display; saved outputs/settings are preserved as historical data.
+- The shared SDF engine now pipelines product/sum/rounding/saturation with all
+  metadata and saved feedback aligned. Delays 1/2/4 use a four-entry forwarding
+  bank at the delayed calculation stage; longer feedback uses existing RAM.
+  Small delay arrays no longer bulk-reset, allowing distributed-RAM inference.
+  Added latency is four clocks per active stage (48 clocks for 12 stages).
+  BNET numerical/order/performance acceptance must be repeated externally.
+- Refresh helper explicitly imports the changed SDF source as a project-owned
+  copy. Diagnostics now include timestamp/watchdog, arithmetic, SDF, CDC and
+  clock-interaction reports. Carry instance names/placements and actual timing
+  requirements are preserved. Existing test-driver ID/settling expectations
+  were adjusted; no new tests or test runs were added.
+
+No tests, software builds, simulation or Vivado runs were performed in this
+follow-up. Do not run Vivado here. No timing closure or distortion improvement
+is claimed. User must refresh project copies, reset old runs, rebuild and
+inspect timing/CDC/DRC/utilization, rebuild/deploy API/server, and identify v8
+before a fresh independent square-pulse check and sine comparison. Fine LUTs
+need recharacterization after the new physical implementation is trustworthy.
+
+### 2026-10-16 TDC timing repair pending implementation
+
+The user ran `diagnose_tdc_width.tcl`; actual reports are readable at
+`C:/vivadoprj/RedPitaya-FPGA/prj/v0.94/project/tdc_width_diagnostics`.
+This implementation has WNS -5.754 ns and 39,710 failing setup endpoints.
+Targeted TDC slacks: capture rise -2.933 ns, fall -2.422 ns, encoder -3.696 ns,
+result write address -3.233 ns, result read/scale -3.042 ns, and capture-counter
+to raw RAM WE -4.679 ns. These are real internal synchronous paths. The worst
+global path is in butterfly/SDF; it is not repaired by the TDC patch.
+
+At the user's request, `tdc_pulse_width.sv` now pipelines raw capture data and
+all associated controls/metadata, adds a fetch wait, tracks staging occupancy
+directly, narrows bounded acquisition counters, and uses a remaining-frame
+countdown. Timeout terminal count is precomputed on the bus and the XDC/checker
+mailbox selector now includes `timeout_last_cfg`. Results use <=1024-record
+BRAM banks with preserved local port registers, a registered read mux, and
+separate scale/correction arithmetic stages. DONE waits for pending writes.
+`tdc_thermometer_encoder.sv` splits chunk filtering, accumulation and output
+decode into pipeline stages without relaxing invalid-code rules. The diagnostic
+helper follows the new hierarchy and adds capture-stage, utilization and
+bus-skew reports. The existing source refresh helper imports these HDL/XDC
+files into project-owned copies, including the encoder via its TDC glob.
+
+The register ABI, 16384-record capacity, API, SCPI server and notebooks remain
+unchanged. New read-index settling requirement: 4 bus clocks for raw fields,
+7 for width, before registering the bus response. Existing `rp_TdcWidthRead`
+already performs 16 settling reads of READ_INDEX, confirmed in `tdc.cpp`.
+Direct-register clients/testbenches must allow the new latency. No tests,
+simulation, synthesis or implementation were run for this patch. Prior PASS
+logs do not validate these changes. User must refresh copies, reset old runs,
+rebuild, review timing/CDC/DRC/utilization and collect fresh hardware results.
+Do not run Vivado on this laptop. Fine calibration stays gated until capture
+and readback are trustworthy; these edits are not evidence of timing closure.
+
 These are instructions for the user on the build device, not authorization to run Vivado here.
 
 1. Back up the working project/image. In the existing GUI project, source prj/v0.94/scripts/refresh_custom_sources.tcl from this repository. Per the user's preference, it now uses import_files -force -norecurse -flat to copy all rtl/tdc_*.sv dependencies plus pulse_gen and bnet_axi_reader_ch, the merged red_pitaya_top_LED7_mod.sv, and the four Gen2/custom XDCs into <project>.srcs/sources_1/imports/ and <project>.srcs/constrs_1/imports/. It replaces matching file membership, selects the imported top, disables competing top source copies, sets constraint use and board defines, and removes SCOPE_ONLY. Later workspace edits require rerunning this script; project copies are not live references to the repository. It prints each imported path and does not launch runs. Retain prior ASG declaration/enum corrections.
@@ -480,6 +572,7 @@ Before deployment, back up the working FPGA image, librp.so and SCPI server; ide
 | App test | Purpose |
 |---|---|
 | scpi-tests/pulse_generator_test.py | Pulse SCPI/register smoke test; finishes OFF |
+| scpi-tests/tdc_pcb_sine_test.ipynb | External manually configured analogue sine through PCB to WIDTH burst capture; configurable FPGA clock, raw CSV/settings, normalized shape/frequency comparison; no PCB voltage calibration assumed |
 | scpi-tests/bnet_sdf_capture_feature_test.ipynb | Current SDF, digital capture, runtime lengths/banks and optional split/combine tests |
 | scpi-tests/bnet_pipeline_mode_test.ipynb | Serial/static comparison and cold/warm diagnostics; check engine compatibility and stale outputs |
 | scpi-tests/ddr_bnet_test.ipynb | DDR/fixed-point/RF regression and historical models |
@@ -490,6 +583,14 @@ Before deployment, back up the working FPGA image, librp.so and SCPI server; ide
 | scpi-tests/tdc_mmcm_random_delay_test.py | Commanded phase/coarse-delay repeatability and boundary ambiguity |
 
 Saved notebook outputs are not a fresh acceptance run. For example, the SDF notebook's current split-helper source says v5 while a stored output says v3; the pipeline notebook contains a zero warm-total timing result and an implausible derived speedup. Restart the kernel, select an identified matching image, rerun setup and tests in order, and inspect raw status/pointers/counters before accepting performance numbers.
+
+### PCB sine-chain notebook (2026-10-16)
+
+Open scpi-tests/tdc_pcb_sine_test.ipynb with tdc_sine_tools.py and tdc_pulse_width_test.py beside it. Enter the external generator frequency, Vpp (not peak/Vrms), DC offset, FPGA trigger frequency and count in CONFIG. The notebook does not control the analogue generator. Defaults are example settings: 1 kHz sine, 1 Vpp, 0.5 V offset, 100 kHz FPGA clock, 16384 samples; verify the PCB's allowed analogue range before applying them. Uses the established E1 pin 5 trigger / pin 7 3.3 V return wiring. Requires NumPy and Matplotlib in the notebook kernel.
+
+The PCB is not voltage-to-duration calibrated. Compare measured width against a sine at the entered frequency with fitted phase/DC/amplitude; also estimate the dominant tone independently. Entered voltage amplitude/offset are reference metadata, not measured volts, gain validation or calibrated reconstruction. Keep original trigger-cycle times when excluding invalid frames. Saves all records, flags, actual trigger period and configuration before analysis under scpi-tests/tdc_sine_results/ (ignored), plus analysis JSON and PNG plots. Starts pulse_gen before ARM, forces coarse mode and attempts output OFF/ABORT on every exit. A separate stop cell is available. Captures are finite bursts, not continuous streaming.
+
+The user's V7 implementation completed routing with failed timing. Saved 2026-10-15 reports show WNS -4.779 ns, 37496 failing endpoints and BRAM usage 135.5/140 tiles. TDC capture and reset paths fail alongside BNET; lowering the trigger rate does not remove the internal 250 MHz violations. Notebook results are diagnostic until timing is repaired. All eight offline numerical/protocol tests in scpi-tests/tdc_sine_tools_test.py passed. Notebook schema and every code cell also passed with a synthetic 16384-record acquisition, CSV/JSON exports and visually checked PNG plots; a 1000.4 Hz synthetic tone was independently estimated at 1000.39996 Hz. These checks do not establish hardware operation or invoke Vivado/HDL simulation. Local reproduction runner/dependencies and synthetic outputs are under ignored build/tdc-sine-review/.
 
 ## 11. Next actions and unresolved items
 

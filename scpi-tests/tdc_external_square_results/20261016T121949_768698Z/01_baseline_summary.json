@@ -1,0 +1,13 @@
+{
+  "accepted_pulses": 3328,
+  "total_frames": 8192,
+  "rejected_frames": 4864,
+  "mean_high_ns": 598.9771634615385,
+  "std_high_ns": 2.704917897183023,
+  "mean_error_ns": -2.8282527872078163,
+  "reference_high_ns": 601.8054162487463,
+  "min_high_ns": 592.0,
+  "max_high_ns": 604.0,
+  "fine_pulses": 0,
+  "correction_ns": 0.0
+}

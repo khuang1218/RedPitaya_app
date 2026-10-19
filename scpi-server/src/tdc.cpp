@@ -173,14 +173,22 @@ scpi_result_t RP_TdcWidthTimeoutQ(scpi_t* context) {
     uint32_t v=0; int result=rp_TdcWidthGetTimeout(&v);
     return tdc_u32(context,result,v,"Width timeout query failed");
 }
-scpi_result_t RP_TdcWidthDataQ(scpi_t* context) {
+scpi_result_t RP_TdcWidthVersionQ(scpi_t* context) {
+    uint32_t version=0;
+    int result=rp_TdcWidthGetVersion(&version);
+    return tdc_u32(context,result,version,"Width version query failed");
+}
+static scpi_result_t tdc_width_data(scpi_t* context, bool raw) {
     uint32_t start=0,count=0;
     if(!tdc_param_u32(context,&start,"Missing width start index.") ||
        !tdc_param_u32(context,&count,"Missing width record count.")) return SCPI_RES_ERR;
     if(count==0 || count>128) return tdc_error(context,RP_EOOR,"Read 1..128 width records per query",true);
     std::vector<rp_tdc_width_result_t> records(count);
-    int result=rp_TdcWidthRead(start,records.data(),count);
-    if(result!=RP_OK) return tdc_error(context,result,"Width read failed",true);
+    int result=raw ? rp_TdcWidthReadRaw(start,records.data(),count) :
+                     rp_TdcWidthRead(start,records.data(),count);
+    if(result!=RP_OK) return tdc_error(context,result,
+        raw ? "Raw width read failed" :
+              "Width read failed or inconsistent hardware record; DATA:RAW? is diagnostic only",true);
     std::ostringstream response;
     for(uint32_t i=0;i<count;++i) {
         if(i) response<<';';
@@ -191,6 +199,8 @@ scpi_result_t RP_TdcWidthDataQ(scpi_t* context) {
     SCPI_ResultMnemonic(context,response.str().c_str());
     return SCPI_RES_OK;
 }
+scpi_result_t RP_TdcWidthDataQ(scpi_t* context) { return tdc_width_data(context,false); }
+scpi_result_t RP_TdcWidthRawDataQ(scpi_t* context) { return tdc_width_data(context,true); }
 static const scpi_choice_def_t scpi_WidthEdge[] = {
     {"RISE",0},{"FALL",1},SCPI_CHOICE_LIST_END
 };

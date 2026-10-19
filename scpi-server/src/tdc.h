@@ -19,6 +19,8 @@ scpi_result_t RP_TdcWidthCountQ(scpi_t* context);
 scpi_result_t RP_TdcWidthCapacityQ(scpi_t* context);
 scpi_result_t RP_TdcWidthTickQ(scpi_t* context);
 scpi_result_t RP_TdcWidthDataQ(scpi_t* context);
+scpi_result_t RP_TdcWidthRawDataQ(scpi_t* context);
+scpi_result_t RP_TdcWidthVersionQ(scpi_t* context);
 scpi_result_t RP_TdcWidthTimeout(scpi_t* context);
 scpi_result_t RP_TdcWidthTimeoutQ(scpi_t* context);
 scpi_result_t RP_TdcWidthLutWrite(scpi_t* context);

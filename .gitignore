@@ -29,3 +29,5 @@
 .vscode
 *~
 build
+scpi-tests/tdc_sine_results/
+scpi-tests/__pycache__/

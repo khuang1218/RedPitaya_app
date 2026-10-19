@@ -61,6 +61,7 @@
 #define TDC_WIDTH_LUT_DATA         0x13cu
 #define TDC_WIDTH_LUT_CONTROL      0x140u
 #define TDC_WIDTH_MIN_PERIOD       0x144u
+#define TDC_WIDTH_READ_READY       0x148u // TDC v8+: index/width pipeline settled
 
 #define TDC_ID_MASK               0xffffff00u
 #define TDC_ID_EXPECTED           0x54444300u
@@ -335,18 +336,60 @@ int rp_TdcWidthSetTimeout(uint32_t cycles) {
     return result;
 }
 
-int rp_TdcWidthRead(uint32_t start, rp_tdc_width_result_t* values, uint32_t count) {
+int rp_TdcWidthGetVersion(uint32_t* version) {
+    if (version == NULL) return RP_UIA;
+    int result = tdc_CheckWidth();
+    if (result == RP_OK) *version = tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET) & 0xffu;
+    return result;
+}
+
+static bool tdc_WidthRecordConsistent(const rp_tdc_width_result_t& r,
+                                    uint32_t expected_cycle, uint32_t taps) {
+    if (r.cycle_id != expected_cycle || r.rise_raw >= taps || r.fall_raw >= taps)
+        return false;
+    if (!(r.flags & RP_TDC_WIDTH_VALID)) return r.width_ps == 0;
+    const uint32_t frame_errors = RP_TDC_WIDTH_NO_RISE | RP_TDC_WIDTH_NO_FALL |
+        RP_TDC_WIDTH_HIGH_AT_START | RP_TDC_WIDTH_EXTRA_EDGES |
+        RP_TDC_WIDTH_TRIGGER_TIMEOUT | RP_TDC_WIDTH_BOUNDARY |
+        RP_TDC_WIDTH_SATURATED | RP_TDC_WIDTH_OUT_OF_RANGE;
+    if (r.flags & frame_errors) return false;
+    const uint32_t mode = r.flags & (RP_TDC_WIDTH_COARSE_ONLY | RP_TDC_WIDTH_CALIBRATED);
+    if (mode != RP_TDC_WIDTH_COARSE_ONLY && mode != RP_TDC_WIDTH_CALIBRATED)
+        return false;
+    const bool fine_valid = ((r.flags >> 16) & 1u) && ((r.flags >> 24) & 1u);
+    const bool fine_invalid = (r.flags & RP_TDC_WIDTH_FINE_INVALID) != 0;
+    if (fine_invalid != !fine_valid) return false;
+    const uint64_t coarse_ps = (uint64_t)r.coarse_ticks * 4000u;
+    if (coarse_ps > UINT32_MAX) return false;
+    if (mode == RP_TDC_WIDTH_COARSE_ONLY) return r.width_ps == coarse_ps;
+    // The stored correction is a difference of two unsigned 16-bit LUT values.
+    const int64_t correction = (int64_t)r.width_ps - (int64_t)coarse_ps;
+    return fine_valid && correction >= -65535 && correction <= 65535;
+}
+
+static int tdc_WidthReadImpl(uint32_t start, rp_tdc_width_result_t* values,
+                             uint32_t count, bool check_records) {
     if (values == NULL && count) return RP_UIA;
     pthread_mutex_lock(&tdc_mutex);
     int result = tdc_WidthIdle();
+    uint32_t version = 0, taps = 0;
     if (result == RP_OK) {
         uint32_t available = tdc_ReadRegSettled(TDC_WIDTH_COUNT);
         if (start > available || count > available - start) result = RP_EOOR;
+        version = tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET) & 0xffu;
+        if (check_records) taps = tdc_ReadRegSettled(TDC_NUM_TAPS_OFFSET);
     }
     for (uint32_t i = 0; result == RP_OK && i < count; ++i) {
         tdc_WriteReg(TDC_WIDTH_INDEX, start + i);
-        // Address and synchronous BRAM read settle before the record is read.
-        (void)tdc_ReadRegSettled(TDC_WIDTH_INDEX);
+        // Older images use the conservative settling reads. New images
+        // explicitly report that all bank/multiply/correction stages settled.
+        if (version >= 8u) {
+            bool ready = false;
+            for (unsigned attempt = 0; attempt < 64u; ++attempt) {
+                if (tdc_ReadRegSettled(TDC_WIDTH_READ_READY) & 1u) { ready = true; break; }
+            }
+            if (!ready) { result = RP_EUF; break; }
+        } else (void)tdc_ReadRegSettled(TDC_WIDTH_INDEX);
         values[i].cycle_id = tdc_ReadRegSettled(TDC_WIDTH_RECORD);
         values[i].flags = tdc_ReadRegSettled(TDC_WIDTH_RECORD + 4u);
         values[i].coarse_ticks = tdc_ReadRegSettled(TDC_WIDTH_RECORD + 8u);
@@ -354,9 +397,21 @@ int rp_TdcWidthRead(uint32_t start, rp_tdc_width_result_t* values, uint32_t coun
         values[i].rise_raw = raw & 0xffffu;
         values[i].fall_raw = raw >> 16;
         values[i].width_ps = tdc_ReadRegSettled(TDC_WIDTH_PS);
+        // Never repair flags, interpolate, retry until plausible, or silently
+        // drop a corrupted record. A separate raw API preserves diagnostics.
+        if (check_records && !tdc_WidthRecordConsistent(values[i], start + i + 1u, taps))
+            result = RP_EUF;
     }
     pthread_mutex_unlock(&tdc_mutex);
     return result;
+}
+
+int rp_TdcWidthRead(uint32_t start, rp_tdc_width_result_t* values, uint32_t count) {
+    return tdc_WidthReadImpl(start, values, count, true);
+}
+
+int rp_TdcWidthReadRaw(uint32_t start, rp_tdc_width_result_t* values, uint32_t count) {
+    return tdc_WidthReadImpl(start, values, count, false);
 }
 
 static int tdc_WidthLut(bool falling, uint32_t start, uint16_t* values,

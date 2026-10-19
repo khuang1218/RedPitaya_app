@@ -341,6 +341,8 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("TDC:WIDTh:CAPacity?", RP_TdcWidthCapacityQ),
     SCPI_CMD("TDC:WIDTh:TICK?", RP_TdcWidthTickQ),
     SCPI_CMD("TDC:WIDTh:DATA?", RP_TdcWidthDataQ),
+    SCPI_CMD("TDC:WIDTh:DATA:RAW?", RP_TdcWidthRawDataQ),
+    SCPI_CMD("TDC:WIDTh:VERSion?", RP_TdcWidthVersionQ),
     SCPI_CMD("TDC:WIDTh:TIMeout", RP_TdcWidthTimeout),
     SCPI_CMD("TDC:WIDTh:TIMeout?", RP_TdcWidthTimeoutQ),
     SCPI_CMD("TDC:WIDTh:CALibration:LUT:WRITe", RP_TdcWidthLutWrite),

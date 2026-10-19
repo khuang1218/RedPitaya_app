@@ -680,7 +680,9 @@ int rp_TdcGetInput(rp_tdc_input_t* input);
  * capture. Start pulse_gen before ARM. Reads follow burst completion; a burst
  * of N uses N+1 trigger edges. ARM sets the stopped-trigger timeout from the
  * pulse period; an output stopped mid-burst is reported, not silently ignored.
- * Old TDC calibration tables do not calibrate this separate carry path. */
+ * Old TDC calibration tables do not calibrate this separate carry path.
+ * v8 adds readout-ready polling. Normal reads reject inconsistent hardware
+ * records; use the explicitly raw diagnostic API only to investigate faults. */
 #define RP_TDC_WIDTH_VALID          (1u << 0)
 #define RP_TDC_WIDTH_NO_RISE        (1u << 1)
 #define RP_TDC_WIDTH_NO_FALL        (1u << 2)
@@ -718,7 +720,15 @@ int rp_TdcWidthGetCapacity(uint32_t* count);
 int rp_TdcWidthGetTick(uint32_t* tick_ps);
 int rp_TdcWidthSetTimeout(uint32_t fast_clock_cycles);
 int rp_TdcWidthGetTimeout(uint32_t* fast_clock_cycles);
+/** Read the TDC interface version (v8 adds width readout-ready status). */
+int rp_TdcWidthGetVersion(uint32_t* version);
+/** Read completed records, rejecting contradictory flags or width fields
+ * with RP_EUF. On error the output array may contain a partial/raw prefix;
+ * it must not be used as a successful acquisition. */
 int rp_TdcWidthRead(uint32_t start, rp_tdc_width_result_t* results, uint32_t count);
+/** Diagnostic only: retain original hardware fields without consistency
+ * rejection. These values may be corrupt and are unsuitable for calibration. */
+int rp_TdcWidthReadRaw(uint32_t start, rp_tdc_width_result_t* results, uint32_t count);
 /** falling=false: leading edge LUT; true: trailing edge LUT. Both tables must
  * be fully written before activation. Edits, FPGA reset and input changes
  * disable correction. Values are calibrated propagation times, in ps. */
