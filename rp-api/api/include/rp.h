@@ -741,6 +741,19 @@ int rp_TdcWidthGetStatus(uint32_t* status);
 int rp_TdcWidthGetCount(uint32_t* count);
 int rp_TdcWidthGetCapacity(uint32_t* count);
 int rp_TdcWidthGetTick(uint32_t* tick_ps);
+/** Hardware minimum launch/frame period in ns. */
+int rp_TdcWidthGetMinimumPeriod(uint32_t* nanoseconds);
+typedef struct {
+    uint32_t cycle_id;
+    uint32_t rise_ticks;
+    uint32_t fall_ticks;
+} rp_tdc_width_edge_ticks_t;
+/** V16 sparse diagnostic timestamps: stride in records and storage capacity.
+ * Sample s belongs to record s*stride (cycle_id=s*stride+1). Ticks wrap at
+ * 2^32 and use the 4 ns WIDTH clock; only VALID records have meaningful pairs.
+ * These are internal sample timestamps, not calibrated pin arrival times. */
+int rp_TdcWidthGetDiagnostics(uint32_t* stride, uint32_t* capacity);
+int rp_TdcWidthReadEdgeTicks(uint32_t start_sample, rp_tdc_width_edge_ticks_t* values, uint32_t count);
 int rp_TdcWidthSetTimeout(uint32_t fast_clock_cycles);
 int rp_TdcWidthGetTimeout(uint32_t* fast_clock_cycles);
 /** Read the TDC interface version (v8 adds width readout-ready status). */

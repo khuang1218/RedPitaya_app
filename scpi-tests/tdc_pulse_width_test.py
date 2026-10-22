@@ -8,6 +8,7 @@ Uncalibrated widths use 4 ns ticks; raw carry codes are diagnostic.
 """
 import argparse
 import csv
+import math
 import socket
 import time
 from pathlib import Path
@@ -58,11 +59,11 @@ def main():
     parser.add_argument("--csv", help="save all records; relative paths go under local tdc_width_results")
     parser.add_argument("--quiet", action="store_true", help="print a summary instead of every pulse")
     args = parser.parse_args()
-    if not 0 < args.frequency <= 2_000_000 or args.count < 1:
-        parser.error("requires 0 < frequency <= 2 MHz (v10 above 1 MHz) and a positive count")
+    if not 0 < args.frequency <= 5_000_000 or args.count < 1:
+        parser.error("requires 0 < frequency <= 5 MHz (V16 above 2 MHz) and a positive count")
     if args.timeout <= 0:
         parser.error("timeout must be positive")
-    period = max(500, round(1e9 / args.frequency / 4) * 4)
+    period = math.ceil(1e9 / args.frequency / 4-1e-9) * 4
     if period > 8_589_934_588:
         parser.error("period exceeds the pulse generator range")
     client = Client(args.host, args.port)
@@ -71,8 +72,14 @@ def main():
         client.send("*CLS")
         version = int(client.query("TDC:WIDTH:VERSION?"))
         client.check()
-        if version < 10 and period < 1000:
-            raise RuntimeError("Frame rates above 1 MHz require the v10 bitstream")
+        minimum = 500 if version >= 10 else 1000
+        if version >= 16:
+            minimum = int(client.query("TDC:WIDTH:MINIMUM:PERIOD?"))
+            client.check()
+            if minimum < 200 or minimum % 4:
+                raise RuntimeError("Invalid hardware minimum period")
+        if 1e9/args.frequency < minimum-1e-9:
+            raise RuntimeError(f"Requested rate exceeds this image's {minimum} ns minimum frame period")
         capacity = int(client.query("TDC:WIDTH:CAPACITY?"))
         client.check()
         if args.count > capacity:

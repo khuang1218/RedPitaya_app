@@ -6,6 +6,406 @@ This is the authoritative workspace handover for BNET, the CARRY4 TDC (currently
 
 ## 1. Current objective and working rules
 
+### Latest update: V16 5 MHz source and precision investigation, October 22
+
+User requested a **5 MHz working-rate target** plus an attempt to resolve broad
+width distributions/precision. **Code and offline checks only**: the user builds
+externally and runs all hardware/notebook measurements. Do not run Vivado, query
+instruments, execute live notebook cells, or reload the FPGA automatically.
+
+**Current source: VERSION16 / ID0x54444310, not implemented or deployed here.**
+The sampler remains250 MHz with a4000 ps coarse tick. WIDTH now processes32 taps
+per clock in each parallel512-tap encoder (16 scan clocks), with a conservative
+49-clock scan/processing budget inside a50-clock/200 ns frame. Hardware minimum
+is200 ns by default, admitting5 MHz finite bursts. Capacity remains16384 records
+(3.2768 ms of periods at5 MHz); continuous streaming is not implemented. Reliable
+sampled-level detection still needs HIGH and LOW each>=8 ns. The six-field width
+ABI, signed fine correction, sampler/raw-pipeline/marker alignment, frame offset,
+validity rules and calibration gates remain. No timing exceptions were changed.
+
+- V15's RISE encoder `last_one_end -> transition_span_ok` failed by12 ps.
+  V16 separates span subtraction and comparison with another register stage,
+  preserving the <=8-tap bounded-population decision. This is a repair candidate,
+  not proof of closure or a demonstrated precision improvement. The two PS AXI
+  converter setup failures at200 MHz (-23/-5 ps) remain timed. Do not lower
+  FCLK3 casually: it is also the IDELAY200 MHz reference. Read-only diagnostic
+  Tcl now reports span stages, sparse diagnostic RAM, and PS AXI paths explicitly.
+- To investigate drift and coarse/fine association, V16 saves internal32-bit
+  RISE/FALL ticks for records1,65,129,... across the burst.256 pairs use2 KiB
+  logical storage;64-bit ports may map to a RAMB36, so inspect implementation
+  utilization. Valid pairs must satisfy modulo32-bit `fall-rise==coarse_ticks`.
+  The same read-index/READ_READY fence covers diagnostic readout. Invalid pairs
+  remain saved but are not interpreted as valid arrival times.
+- New API functions expose hardware minimum period and sparse ticks. SCPI adds
+  `TDC:WIDTH:MINIMUM:PERIOD?` (default200), `DIAGNOSTIC:CONFIG?` (64,256), and
+  `DIAGNOSTIC:EDGE? start_sample,count` (<=128 rows of cycle_id,rise_ticks,fall_ticks).
+  Rebuild **API first, then SCPI**, because SCPI statically links the API. Deploy
+  both matching software artifacts and restart the server before V16 notebook use.
+  The memory-backed actual-parser host test covers the new commands and guards.
+- Helper defaults to exactVERSION16; explicit14/15 configurations remain usable
+  with500 ns minimum and no diagnostic queries. V16 preflight rejects stale
+  servers missing new commands. Every burst checks sparse timestamp association
+  and retains raw pairs in JSON plus extra CSV columns. Per-edge drift uses
+  modulo-unwrapped sample ticks minus the applicable LUT and nominal elapsed
+  frames. Fine-ineligible pairs are counted, never given artificial LUT timing.
+  Sparse data can miss fast excursions and is not an independent pin reference.
+- Notebook now expects16 and sets **IMPLEMENTATION_WNS_NS=None**: enter the NEW
+  route's WNS, never V15's. It keeps1 MHz baseline/calibration for comparison,
+  extends rate/duty tests through3/4/5 MHz requests (332/252/200 ns common periods), repeats
+  baseline/5 MHz drift cases with one frozen LUT, and includes a full-capacity
+  5 MHz capture. All attempts/samples remain; no jitter/bias-based retry, trimming,
+  smoothing, or automatic width correction. The optional host offset remains
+  separately reported and cannot repair random drift/narrow-pulse nonlinearity.
+- Before clearing active outputs, preserved the user's fully executed V15
+  notebook byte-for-byte at
+  `build/tdc-resolution-review/20261022-v15-executed-before-v16.ipynb`, SHA256
+  `44feca13368bb272a186b62ac4dcc90358f0bfc6656ffa2966403af4d5490917`.
+  V15 run data stays outside the checkout under local data, run
+  `scpi-tests/tdc_rigol_results/20261022T192924_518633Z/`.
+
+Latest completed V15 baseline:287 capture attempts passed status/count/integrity,
+zero fine arithmetic mismatches/cleanup errors, final outputs stopped. Fresh
+500.2 ns comparisons gave coarse SD1.80..1.83 ns versus fine SD38.94/196.05/46.67 ps
+at1000/1004/1008 ns periods; raw bias+2.62..2.70 ns. Calibration had196608 samples
+per edge,214/217 occupied bins and100% fine validity. Broad cases moved between
+V14 and V15 rather than disappearing (e.g.102.25 ns step SD~1.06 ns onV15);
+rate/duty median SD worsened~50->96 ps and width bias increased~0.55 ns. Thus
+V15 was not an overall precision improvement. These are timing-provisional,
+complete-burst-selected results, not absolute accuracy. The supplied V15 routed
+report is still WNS-0.023 ns/TNS-0.040 ns,3setup/0hold failures; it is not V16 timing.
+
+Offline validation:12 Python regressions passed (5 MHz planning/overspeed,
+exact-version/stale-server rejection, timestamp wrap/association/drift, full-data
+stability gates, and a fully mocked acquisition through sparse CSV/JSON export).
+Actual API/SCPI parser host regression passed with memory-backed
+registers using GCC6.2/C++14 and existing Windows shims; this is not the Linux/ARM
+production build. Encoder independent-reference tests passed: exhaustive65536
+16-tap patterns for strict/grouped and population modes,17/512-tap boundaries,
+and2775 production-size population patterns. Legacy TDC integration and small
+WIDTH watchdog/abort/overflow/boundary/signed-correction regressions passed.
+Calibrated512-tap/**16384-record200 ns /5 MHz** simulation passed: all records
+checked against ideal widths within40 ps, CAL_USED/no coarse fallback required,
+all256 sparse timestamp pairs matched their stored coarse widths, no staging
+overflow, and read-index bounds enforced. All16 result banks and staging-ring
+wraps were exercised. A separate32-record run with16384-capacity storage passed,
+as did the2 MHz coarse compatibility test. The full run stopped only the
+testbench fast clock after the DONE/drain fence during readout; the actual
+16384-frame acquisition ran at full rate. Logs and runners are in ignored
+`build/tdc-resolution-review/`, especially `v16_5mhz_16384.log`.
+Ideal delay simulations verify
+logic/throughput, not routed timing, physical jitter, absolute bias or pin precision.
+
+User build/run sequence:
+
+1. Source the existing `refresh_custom_sources.tcl`, which copies/verifies V16
+   sources and prints ID0x54444310; reset synthesis/implementation and rebuild
+   externally. Inspect full routed setup/hold, CDC, DRC, utilization and sampler
+   layout; the two AXI failures must not be waived.
+2. Build/install API then SCPI (`make api`, then `make scpi` in the normal Linux
+   build environment), deploy/restart matching server, load the new bitstream.
+3. Enter the actual V16 identity/WNS in `tdc_rigol_characterisation.ipynb`, restart
+   kernel, run from the top for fresh calibration and5 MHz/drift tests. Keep all
+   raw outputs for analysis. No hardware result for V16 is claimed yet.
+
+### Historical update: V15 notebook enabled; user runs hardware tests manually, October 22
+
+User implemented/loaded V15 and authorizes diagnostic notebook use despite three
+remaining setup failures. Preflight during the partial run confirmed VERSION15,
+4000ps tick,512taps,16384capacity,SINGLE. The user subsequently reloaded the FPGA
+or restarted the board, interrupting that run; current hardware state is unverified.
+**Latest user preference: fix code only; the user runs the notebook/hardware tests
+and will request analysis of results. Do not automatically execute measurements,
+query/control instruments or reload FPGA images without a new explicit request.**
+This supersedes earlier autonomous bench-execution authorization.
+
+- New supplied route: WNS **-0.023ns**, TNS **-0.040ns**,3setup failures,
+  no hold failures. One WIDTH RISE encoder path `last_one_end -> transition_span_ok`
+  is -0.012ns; two PS AXI converter `ar_pipe/m_payload[36] -> wrap_cnt[2/3]`
+  paths are -0.023/-0.005ns. Ordinary timing remains failed; measurements are
+  provisional. No HDL/constraint changes or Vivado invocation in this update.
+- Fixed both notebook V14 pins: configuration now expects15; setup no longer
+  overrides it. Preflight checks the configured version and rejects stale Bench
+  state; helper defaults to15 but still supports explicitly configured14.
+  Tick/tap/offset checks and all original integrity/calibration gates remain.
+  WNS source updated to-0.023; final timing_closed remainsfalse.
+- Previous executed notebook, including the V14-versus-V15 preflight exception,
+  archived under local data `executed_notebooks/20261022T190951Z_before_v15/`.
+  Active outputs cleared before starting a new kernel/run; no old LUT is reused
+  for fine V15 measurements. Eight offline Python tests and notebook AST checks
+  passed, including exact-version rejection and V15 acceptance.
+- Ran actual notebook with envscpi/Python3.14 in a separate Jupyter kernel.
+  Run data: `scpi-tests/tdc_rigol_results/20261022T191133_650907Z/`.
+  Executed notebook/log/status: `executed_notebooks/20261022T191123Z_v15_diagnostic/`.
+  The driver saves each completed cell, stops at quality/instrument errors,
+  independently reconnects for final STOP, and updates the active notebook only
+  if it was not edited during execution. Full run outcome must be checked below
+  or in that folder's execution_status.json; startup alone is not completion.
+- Supplied timing report copied beside measurements with implementation_evidence.json;
+  report SHA256 `a1ea421ed88c14df041f1d3023fa503799d6555af0eaecfa5fbc0ae0fbaef5e6`.
+  Project bit.bin hash is recorded separately; loaded image hash remains unverified.
+  Matched source/frame periods and authorized50-start completeness retries stay.
+- Outcome: preflight/alignment/baseline/identity and all24calibration bursts passed.
+  New RISE/FALL samples196608each,214/216populated bins,100%fine valid,no missing
+  codes,CDF differences0.008138/0.008026 <0.03. Both new V15 LUTs uploaded/read
+  back exactly. First two fresh8192-pulse comparisons: period1000ns coarseSD
+  1.838ns/fine39.715ps,meanbias+2.600727ns; period1004ns coarse1.799ns/fine
+  45.676ps,meanbias+2.636341ns. Both distributions have zero >1ns-from-median
+  samples. These are conditional/provisional results, not qualified accuracy.
+- Run stopped at cell17 starting `fresh_coarse_f992063` (1008ns frame), BEFORE
+  enabling outputs for that attempt: `PULSE:OUTPUT OFF`/error query connection
+  reset WinError10054. Reconnection succeeded for *IDN?, but PULSE:OUTPUT OFF
+  and TDC:WIDTH:ABORT returned9516 Unsupported Feature; VERSION?/PIN? had no
+  reply. **Rigol OFF confirmed; current FPGA stop/status NOT confirmed.** The
+  last completed capture had clean output-off/idle cleanup. Do not state that
+  the final STOP passed or that current V15/LUT state was retained.
+- Executed partial notebook/log and execution_status.json remain in the folder
+  above. Saved `partial_run_report.json` with completed/unrun sections beside
+  raw data.88capture attempts total,36selected complete pulse points plusDC;
+  one instrument-failed attempt. Width/small-step/rate/host-reference sections
+  and final full-run report did not execute. No integrity/calibration gates
+  relaxed and no instrument fault automatically retried into a pass.
+- User confirmed FPGA reload or board restart during the run. Treat the SCPI
+  interruption as external to this measurement sequence; do not attribute it to
+  V15 timing/TDC arithmetic. The pending follow-up board query was rejected by
+  automatic approval review after the user's code-only instruction; not retried.
+  Active notebook outputs were cleared only after verifying the executed archive
+  was byte-identical. Restart kernel/run from the top for manual V15 calibration.
+
+### Latest handoff: V14 drift/bias investigation and V15 timing repair, October 22
+
+This section supersedes the earlier unknown-WNS and current-source statements
+below. **Loaded board remains V14/SINGLE with the original qualified LUTs;
+source is now V15 / ID0x5444430f, not built or deployed.** Never run Vivado
+locally; the user builds externally. Preserve equal AWG/launch/frame periods
+and the authorized restart-to-complete policy; never retry by jitter or bias.
+
+- User supplied routed report:
+  `C:/vivadoprj/RedPitaya-FPGA/prj/v0.94/project/redpitaya.runs/impl_1/red_pitaya_top_timing_summary_routed.rpt`,
+  dated October22 11:42:13, Vivado2020.1. **WNS-0.039ns, TNS-0.322ns,
+  14 setup failing endpoints,0hold failures.** All setup failures are in
+  `pll_ser_clk`/WIDTH. Ten detailed paths include request_sync/request_seen
+  decode -> completed_fast reset and record_write_data CE; max_paths10 does
+  not enumerate all14 endpoints. These ordinary control paths must meet timing.
+  Flat imported WIDTH/encoder/carry/layout/XDC source files matched the workspace
+  before V15 edits. Loaded bitstream hash still unverified; do not rewrite the
+  historical V14 run metadata. The supplied report hash is
+  `80a3c4e93fe519c9a3a70ac17f807a13fbd5e850143f8672ebdbc47b762b8619`.
+  Preserved31files/27696523bytes, SHA256 verified, under local data
+  `build/hdl-review/20261022-v14-before-command-repair/` (manifest.json,
+  bit/bit.bin,routed checkpoint,reports,flat imported sources/constraints).
+  Bit.bin SHA256 `dd3ba4d01372e7c3e6770029dd9b306f6b9edf7b15356ee1c7b8245e700acab1`.
+- Existing raw CSV analysis shows broad captures have slow intra-burst width
+  drift, not simply rare one-clock outliers. Several unwrapped FALL phases
+  remain nearly linear while RISE phase wanders. This is a diagnostic under
+  slow-phase-walk assumptions, not proof of a particular physical cause.
+  LUT arithmetic/record integrity remain consistent. Coarse/fine association,
+  source edge position and input-path/TDC physical delay cannot all be separated
+  from the saved six-field records.
+- Live bounded probe with unchanged V14 and exact readback-verified existing
+  LUTs: local data
+  `scpi-tests/tdc_rigol_results/20261022T163151Z_stability_probe/`.
+  Eight selected4096-frame points took33starts; all attempts saved, including
+  25rejected zero/partial bursts. No jitter/bias selection or LUT upload.
+  At103.2ns, two original-settling SDs63/60ps; two500ms-AWG +500ms-launch
+  warmups SD48/95ps. At900ns, original settling SD211ps and longer settling
+  SD490ps (the latter needed24starts). Control500.2ns SD128ps initially,
+  47ps finally. **Longer settling is not a demonstrated cure.** Every capture
+  cleanup confirmed AWG/FPGA outputs OFF and WIDTH idle. Existing LUTs preserved.
+- Host bias fit was contaminated by the20.2ns narrow-width bias and unstable
+  100/250/800ns training captures. `fit_width_reference` now defaults to fixed
+  scale1/offset only, using full calibrated captures with reference>=100ns,
+  SD<=150ps and eight-block mean span<=250ps. Exclusions and gates are saved;
+  no samples are removed. Affine fitting is opt-in and needs>=3stable widths.
+  These are diagnostic criteria, not certified specifications. Neither model
+  is automatically installed in HDL or applied to raw CSVs.
+- Retrospective old-data result: only reference_train_w500.25 passes these
+  training gates; offset=-2.094501464843745ns. Original held-out40.2/150.2/
+  350.2/650.2ns corrected mean errors become **-84.7/-20.5/-33.2/-45.8ps**,
+  versus old affine -413/-310/-252/-160ps. This does not calibrate clock scale,
+  establish narrow-width linearity, or certify absolute accuracy. New independent
+  probe errors after that same frozen offset range **-173..+169ps**; control
+  mean errors -6.7/+3.9ps. Broad within-burst distributions remain unchanged.
+- New `scpi-tests/tdc_rigol_review.py` reanalyses saved CSV/JSON without instrument
+  access or changing originals. Review JSON and visually checked plot are in
+  probe's `review/width_review.json` and `review/width_review.png`. Summaries now
+  include full range/percentiles, >1ns-from-median count and chronological block
+  drift. Notebook section8 uses the new offset model; saved outputs remain
+  historical until rerun. Optional `launch_settle_s` (default0) and measured
+  on-to-ARM intervals support explicit startup experiments; default source
+  settling remains50ms because the probe did not establish a better value.
+- V15 repair registers start/abort toggle decoding before the wide reset/CE
+  fanout, adding one250MHz command-acceptance clock with self-inhibit against
+  replay. No raw sample/edge timestamp/frame marker/LUT arithmetic/ABI/frame
+  minimum or timing exception change. Diagnostic Tcl includes command-control
+  registers. **Source-only repair candidate, not established timing closure or
+  a demonstrated fix for broad width distributions.** The notebook intentionally
+  still expects loaded V14; switch expected version15 after an identified rebuild.
+- Verification: seven offline Python drift/reference-model tests passed;
+  notebook code/Python AST passed; Icarus WIDTH regression passed bus holds1/2/3,
+  signed/frozen correction, watchdog, abort/rearm, overflow, frame boundaries and
+  readout;512taps/32records at500ns frames passed; legacy TDC isolation/FIFO/LUT
+  passed. One stale boundary assertion failed identically on unmodified V14:
+  exact-boundary FALL is BOUNDARY/nonvalid, not NO_FALL. Assertion corrected and
+  a separate strictly-beyond-frame case added. Ideal models do not prove physical
+  precision or routed timing. No Vivado, new bitstream or API/server build run.
+- User has no scope connected now; can check later and reports a previously
+  observed sharp rising edge. That does not establish pulse-to-pulse edge-position
+  stability or remove rise/fall path bias. Later measure HIGH and edge-position
+  persistence at DIO2_P over several milliseconds, especially900ns and103.2ns,
+  before assigning drift to AWG/input electronics versus the physical TDC.
+
+Next: preserve V14 build, externally refresh/import V15 and route with normal
+timing checks; obtain full endpoint/CDC/DRC and sampler-layout reports. Do not
+load until applicable timing passes. A newly routed image requires fresh rise/
+fall calibration and independent full-distribution repeats. Preserve the V14
+capture/plot evidence; do not subtract a constant and call short pulses accurate.
+
+### Previous handoff: completed V14 Rigol notebook, reviewed October 22
+
+**Read this section first in the next chat.** The user's latest executed
+`scpi-tests/tdc_rigol_characterisation.ipynb` completed every measurement section,
+final report and STOP, with **no saved notebook exceptions**. This supersedes the
+earlier baseline/alignment failures below. This review only read saved evidence
+and updated this handover; no new instrument run or implementation was performed.
+
+#### Where to resume
+
+- Latest full run: **`20261022T151733_789672Z`**, under
+  **`C:/Users/kairan/RedPitaya_local_data/RedPitaya_app/scpi-tests/tdc_rigol_results/`**.
+  It contains 226 capture CSVs, 359 JSON files and 9 figures. Keep this data outside
+  the API/SCPI checkout for the user's space-limited Ubuntu/VirtualBox sync.
+- Main evidence: `run_report.json`, `candidate_luts.json`, `uploaded_luts.json`,
+  `previous_luts.json`, `fresh_precision_comparison.json`, `phase_residuals.json`,
+  `narrow_sweep_summary.json`, `small_step_summary.json`, `rate_duty_summary.json`,
+  `host_width_reference_model.json`, `host_width_reference_validation.json`, and
+  all `*_retries.json` ledgers plus their linked raw captures.
+- Board reports **VERSION14**, 4000ps tick, 512 taps, 16384-frame capacity,
+  SINGLE input. The build label is still a placeholder and routed WNS is null.
+  `run_report.json: timing_closed=false` means closure was not established from
+  the supplied metadata; it is NOT a newly measured V14 timing failure.
+  The older v12 +0.031ns WNS must not be attributed to this V14 image.
+- Rigol DG5502 Pro serial DG5R270700006, USB resource
+  `USB0::0x1AB1::0x0647::DG5R270700006::INSTR`; RP169.254.77.151:5000.
+  Only CH1 -> DIO2_P/E1 pin7 plus ground is connected; Rigol uses INT reference.
+  Single-ended remains the focus, LVDS deferred, BNET excluded from bitstream.
+- AWG nominal period = FPGA launch period = full acquisition frame duration.
+  The 997003Hz request maps to **1004ns /996015.936Hz** on both instruments;
+  FPGA launch HIGH502ns. Rigol pulse PER? can report1004.1ns while FREQ? matches
+  the1004ns setting; preserve both replies, do not treat readback resolution as
+  measured clock error. FRAME_OFFSET_NS=0 throughout this run.
+- **User explicitly authorized restarting every pulse test until a full complete
+  burst is received. Keep that policy.** Notebook PHASE_RETRIES=True,
+  PHASE_RETRY_MAX_ATTEMPTS=50, delay0.2s. `Bench.acquire` in
+  `scpi-tests/tdc_rigol_tools.py` wraps `_acquire_once`; zero/partial bursts restart
+  unchanged stimulus settings. Instrument, integrity, arithmetic and cleanup
+  faults stop immediately. DC0V control runs once and expects zero complete pulses.
+  Do not reinstate the earlier no-retry rule or require a trigger cable merely to
+  continue this selected-burst characterization. No period detuning/shortening.
+
+#### Completed results
+
+- All **226 acquisitions passed status/count/record integrity**, no saved capture
+  failure or cleanup error. All saved fine-arithmetic checks have zero mismatches.
+  Final notebook STOP confirmed AWG selected output OFF, FPGA pulse output OFF,
+  WIDTH idle. LUTs are volatile; STOP does not erase them, bitstream reload does.
+- Retry accounting: **116 pulse test points,225 starts** (109 rejected starts),
+  plus one DC acquisition. Maximum16 starts for a point; no50-start exhaustion.
+  Across these mixed pulse attempts,634918/1146880 frames were complete (55.36%).
+  Every selected pulse burst was100% complete by selection. These fractions are
+  conditional test diagnostics, not unconditional device efficiency or phase lock.
+  All rejected zero/partial bursts remain in the local result folder.
+- Baseline:8192/8192 complete on first start; mean502.364ns versus500.2ns AWG
+  HIGH, coarse SD1.967ns, both fine-code valid fractions100%.
+  Signal identity **passed**: DC0/4096;100.2,300.2,700.2ns inputs gave coarse
+  means102.221,302.302,702.208ns, respectively. The700.2ns point needed3 starts.
+- Fine calibration:24 accepted8192-frame bursts (8 rounds at common periods
+  1004,1008,1016ns; HIGH502,504,508ns). **196608 valid samples per edge**;
+  RISE214 populated bins,FALL216; both valid-edge fractions100%; no missing-code
+  runs or provisional exceptions. Time/frequency CDF differences0.00922/0.01291
+  were below0.03. Candidate ready=true; no quality-gate relaxation.
+  Both0..4000ps monotone LUTs were uploaded and read back exactly, correction
+  activated. Uploaded tables match `candidate_luts.json`. The saved generic status
+  string still says "candidate; requires fresh validation", although fresh tests
+  subsequently ran; judge the actual validation files rather than that stale label.
+
+Fresh ~500.2ns HIGH validation,8192 pulses per capture (separate coarse/fine bursts):
+
+| Common period | Coarse SD | Fine SD | SD improvement | Fine mean error vs AWG |
+|---|---:|---:|---:|---:|
+|1000ns|1.988ns|37.38ps|53.19x|+2.077ns|
+|1004ns|1.978ns|44.83ps|44.13x|+2.088ns|
+|1008ns|1.981ns|45.24ps|43.79x|+2.082ns|
+
+- All fresh validation codes were represented in the calibration histogram.
+  Eight rise-phase-bin mean errors varied by only12.1/16.6/14.9ps in these three
+  fine bursts. This supports useful within-clock interpolation in these cases;
+  it does not establish37ps absolute accuracy or uniform performance everywhere.
+- **Short pulses remain inaccurate.** Fine-only results:4.2ns input ->10.102ns
+  mean (+5.902ns),SD0.373ns,FALL-valid4044/4096=98.73% (52 coarse fallbacks).
+  5/6/8/12/20ns inputs have errors+5.945/+5.997/+5.489/+4.557/+3.143ns.
+  At50/100ns error is+2.704/+2.107ns. Low SD on some short widths does not remove
+  this large width-dependent bias. Detection below8ns is still not guaranteed.
+- Small-step sweep:17 fine settings across100..104ns in requested0.25ns steps;
+  actual AWG readbacks quantize. Mean widths are monotone, fitted mean-vs-readback
+  slope1.00546, residual span0.336ns. Adjacent mean steps0.064..0.423ns. Most
+  fine SDs47..108ps, but103.25ns request hasSD1.009ns and104nsSD0.223ns.
+  Do not equate nominal LUT/bin resolution with validated single-pulse accuracy.
+- Rate/duty sweep:all15 selected4096-frame captures complete, both fine-valid
+  fractions100%, through **2MHz finite bursts** at10/50/90% duty. Applied rates
+  100k,500k,996.016k,1.497006M,2MHz.50%-duty fine SD34..50ps, but important
+  exceptions:500k/10% SD0.578ns;996.016k/90% SD1.050ns;2M/90% SD0.742ns.
+  Thus the low-jitter500ns result does not generalize to every width/rate/phase.
+  5/10/50MHz requests were correctly rejected as below the500ns frame minimum;
+  no overspeed or streaming performance was measured.
+- Raw evidence for the broader distributions: accepted `rate_f499979_d10` spans
+  199.377..202.903ns; `rate_f997003_d90` spans904.163..907.886ns (1723/4096
+  samples >1ns from median); `rate_f1.997e+06_d90` spans451.475..453.908ns.
+  These are not merely missing frames or fine-invalid fallbacks: all are complete,
+  both fine-valid and calibrated, with arithmetic matching the uploaded LUTs.
+- Host reference fit:reference=1.0003510459*measured-2.4374308953ns, trained at
+  20.2/100.2/250.2/500.2/800.2ns nominal AWG HIGH. Held-out40.2/150.2/350.2/
+  650.2ns mean errors after correction are **-0.413/-0.310/-0.252/-0.160ns**,
+  SD57/48/53/83ps. This improves the~+2ns offset but leaves systematic residuals;
+  the short20.2ns training point has extra bias and may distort one global affine
+  fit. Scope overrides were empty, so this is nominal AWG-reference transfer,
+  not traceable absolute calibration. Host correction is saved only, not in HDL.
+
+#### Next steps, in priority order
+
+1. **Preserve this V14 image and qualified LUTs as the working reference.** Obtain
+   the actual loaded bitstream hash/build identity and its routed timing summary;
+   fill the notebook label/WNS from evidence. Do not rebuild solely because the
+   notebook's WNS field is null. Never run Vivado locally; the user builds externally.
+2. **Investigate the valid-code but broad-error sweep points using existing raw
+   CSVs first.** Compare coarse ticks,RISE/FALL raw indices,LUT correction,frame
+   order and measured width at the cases listed above and `step_w103.25_fine`,
+   `narrow_w500_fine`,`narrow_w900_fine`. Repeat a bounded subset with the approved
+   retry policy to assess reproducibility. Correlate residuals with both edge codes
+   and coarse transitions; examine coarse/fine edge association and sampler recovery
+   only as hypotheses. Current arithmetic agreement does not prove edge association.
+   Keep all samples; do not trim modes/tails to advertise the best SD.
+3. **Separate fixed path/threshold bias from narrow-pulse nonlinearity.** Independently
+   measure HIGH at the FPGA pin at representative short/long widths if a suitable
+   scope reference is available. Compare an affine fit trained on >=100ns widths
+   against held-out points, then assess a separate narrow-width model only if
+   reproducible. Do not subtract2ns and call4.2ns capture accurate; fine LUT density
+   calibration alone does not remove the~6ns short-pulse bias.
+4. **Validate stability across independent runs/time and production-like PCB
+   return pulses**, retaining the same bitstream and input path. Preserve density,
+   fine-validity,CDF,raw-integrity and held-out-validation gates. Retry selection can
+   bias fine-phase coverage; use repeat distributions,not selected100% yield,to
+   assess stability. Existing nominal rates are matched; no detuning to force a pass.
+5. For eventual one-result-per-launch operation, investigate a supported hardware
+   timing reference/trigger scheme and cable/VTC delay calibration. The current
+   direct free AWG is not causally tied to FPGA launches. Approved retries permit
+   characterization now; they do not solve production synchronization. Check Rigol
+   trigger/rearm capability before assuming1MHz external per-cycle triggering.
+6. Reporting improvements for later:mark fresh validation explicitly in final
+   status; report matched FREQ? and PER? separately (candidate `frequencies_hz`
+   currently derives from rounded PER?, so it differs slightly from programmed
+   common rates); include full-distribution/tail metrics and repeat variability,
+   not just the best precision comparison. No such code changes were made here.
+
 ### Local calibration storage and Ubuntu sync (2026-10-22)
 
 Calibration captures/LUTs,plots,local HDL review/tool folders and simulation
@@ -73,12 +473,78 @@ output have been moved outside the API/SCPI repository to:
 - The current priorities above supersede LVDS recommendations in the retained
   legacy sections below. Do not switch back to LVDS as a routine next step.
 
-Active source is now **VERSION14 / ID0x5444430e**, based on the timing-passing
-v12-timing-r1 capture with a fixed frame-offset timer. V14 is source-ready,
-not implemented or loaded by the assistant; new routed WNS is unknown. The
-preserved v12 baseline passed WNS+0.031ns/0setup/hold failures,WIDTH+0.110ns.
-That result must not be attributed to V14. Latest observed hardware was v12.
+Active source is **VERSION16 / ID0x54444310**, adding a5 MHz burst target,
+pipelined transition span and sparse edge timestamps to V15 capture. Latest
+user-completed measurements are V15; V16 was not built/loaded here. Its new
+routed timing is unknown. The supplied V15 route has WNS-0.023 ns/3 setup
+failures; loaded bitstream hash remains unverified. The preserved v12 baseline's
+passing timing must not be attributed to V14, V15 or the V16 source.
 BNET remains excluded; single-ended input remains the active focus.
+
+### October 22: user-authorized restart-to-complete tests (current policy)
+
+- User explicitly requests restarting the AWG/source acquisition after zero or
+  partial complete-pulse bursts, separately for every test. This supersedes the
+  earlier no-lucky-retry instruction for the Rigol notebook. Equal source/frame
+  periods and all instrument, integrity, fine-validity and LUT gates remain.
+- `tdc_rigol_characterisation.ipynb` enables PHASE_RETRIES=True with
+  PHASE_RETRY_MAX_ATTEMPTS=50 and PHASE_RETRY_DELAY_S=0.2. `Bench.acquire` restarts
+  the same stimulus until EVERY requested frame has one complete pulse. Baseline,
+  identity widths, density, coarse/fine validation and all sweeps share this path.
+  DC LOW is acquired once and expects zero pulses; false positives are not retried.
+  The helper defaults to single acquisitions unless the config explicitly enables
+  retries. Attempt exhaustion raises with the ledger path; Interrupt/STOP remain.
+- Every attempt retains its own CSV/JSON and instrument log outside the repo;
+  a per-test `*_retries.json` ledger lists counts, flags, accepted start and aggregate
+  complete fraction across ALL starts. Instrument/protocol/integrity/arithmetic
+  and cleanup errors stop immediately. No selection by width error, fine-code
+  validity or LUT shape; those original quality checks still run afterward.
+- These measurements are conditioned on complete bursts. Selected-burst100%
+  yield is the acceptance criterion, not unconditional efficiency or phase lock.
+  Fine phase coverage may be biased by burst selection; candidate metadata and
+  limitations preserve this and the retry ledger links. No HDL/API/server change.
+- Executed notebook before this edit is archived in local storage
+  `executed_notebooks/20261022_before_phase_retries/`; active outputs were cleared
+  to avoid presenting old failures as results of the new policy. Restart kernel,
+  rerun configuration/setup/preflight, then tests. No need to rebuild the bitstream.
+- Live baseline/identity run passed with this policy; local results
+  `scpi-tests/tdc_rigol_results/20261022T135738_058063Z_restart_tests/`.
+  Baseline8192/8192 on start1; DC0/4096 (one acquisition); width100.2ns first
+  1512/4096 then4096/4096 on start2; width300.2ns4096/4096 on start1;
+  width700.2ns0/4096 twice then4096/4096 on start3. Selected coarse means
+  102.097/302.204/702.312ns respectively; baseline502.246ns versus500.2ns.
+  Identity passed; every raw attempt retained, all period settings1004ns,
+  offset0. Fine correction OFF; no new LUT collected/uploaded in this run.
+  Final stop confirmed both outputs OFF and capture idle. Helper/notebook syntax
+  parsed. Full calibration and all sweeps were not executed by the assistant.
+
+### October 22: live alignment attempt with the direct Rigol connection
+
+- User confirmed only Rigol CH1 -> FPGA DIO2_P is connected; no FPGA-to-AWG
+  trigger/reference connection. Live queries confirmed VERSION14, SINGLE input,
+  FPGA period/HIGH1004/502ns, Rigol internal reference and the expected serial.
+- Requested live alignment used one continuous source session at the same nominal
+  1004ns period, AWG HIGH500.2ns, 0..3.3V. A fixed 16-point offset survey retained
+  every 256-frame pilot. Only isolated/paired offsets passed; no >=3-point bounded
+  passing region was found. No full measurement was retried or qualified.
+  Results: local storage `scpi-tests/tdc_rigol_results/20261022T134132_632981Z_live_alignment/`.
+- Separate diagnostic kept BOTH sources continuously running, offset0 and all
+  settings unchanged across eight 1024-frame captures. Complete counts were
+  1024,1024,0,0,1024,1024,0,0 over about five seconds; status/count/record integrity
+  passed. Failed frames all had HIGH_START|EXTRA_EDGES|NO_FALL|SATURATED.
+  This supports relative-phase drift even without restarts; equal nominal rates
+  plus a fixed offset do not establish persistent alignment. It is not a direct
+  phase/frequency measurement or proof that every HDL timing path is correct.
+  Results: local storage `scpi-tests/tdc_rigol_results/20261022T134429_033790Z_fixed_offset_drift/`.
+- FPGA SCPI query/write median latency was about85/45ms; TCP_NODELAY did not
+  improve it. Offset probes took about0.5s each, so their pass map cannot be
+  treated as a simultaneous static phase map. Experimental automatic survey
+  source is archived beside the first run; it was removed from the normal helper
+  after the failed attempt. Calibration gates and notebook source are unchanged.
+- Both outputs were confirmed OFF and capture aborted/idle after diagnostics;
+  cleanup returned no errors. No LUT upload, HDL/API/server change or rebuild.
+  Repeatable synchronization needs a suitable hardware timing connection and
+  verification; do not assume per-cycle Rigol external triggering supports1MHz.
 
 ### October 22: V14 fixed frame offset from passing v12 (active source)
 

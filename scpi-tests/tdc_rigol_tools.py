@@ -1,4 +1,4 @@
-"""Rigol DG5502 Pro + v14 WIDTH acquisition, calibration and saved diagnostics.
+"""Rigol DG5502 Pro + v15 WIDTH acquisition, calibration and saved diagnostics.
 
 Importing this module does not contact instruments. The notebook is the entry
 point. AWG and FPGA are programmed to one common period on the FPGA timing grid.
@@ -417,6 +417,22 @@ def expected_complete_fraction(period, high, window):
     return max(0., min(low, window-high)-max(0., window-period)) / period
 
 
+def width_distribution(values):
+    """Full-distribution and chronological diagnostics; never trims samples."""
+    values = np.asarray(values, dtype=float)
+    if not len(values):
+        return dict(n=0, median_ns=None, min_ns=None, max_ns=None, range_ns=None,
+                    p01_ns=None, p99_ns=None, beyond_1ns_from_median=0,
+                    block_means_ns=[], block_mean_span_ns=None)
+    median = float(np.median(values))
+    blocks = [float(b.mean()) for b in np.array_split(values, min(8, len(values)))]
+    return dict(n=len(values), median_ns=median, min_ns=float(values.min()), range_ns=float(np.ptp(values)),
+                max_ns=float(values.max()), p01_ns=float(np.percentile(values, 1)),
+                p99_ns=float(np.percentile(values, 99)),
+                beyond_1ns_from_median=int(np.count_nonzero(np.abs(values-median) > 1)),
+                block_means_ns=blocks, block_mean_span_ns=float(np.ptp(blocks)))
+
+
 def summarize(capture):
     complete = rows(capture)
     eligible = rows(capture, both_fine=True)
@@ -447,6 +463,7 @@ def summarize(capture):
                             std_ns=float(values.std(ddof=1)) if len(values) > 1 else None,
                             error_ns=float(values.mean()-capture["reference_ns"])
                             if len(values) and capture["reference_ns"] is not None else None)
+        result[name]["distribution"] = width_distribution(values)
     delays = np.asarray([delay*4 for r, delay in
                          zip(capture["records"], capture.get("latency_ticks", []))
                          if r[1] & 1 and delay != 65535], dtype=float)
@@ -464,6 +481,58 @@ def summarize(capture):
         maximum=float(observed.max()) if len(observed) else None,
         mean=float(observed.mean()) if len(observed) else None,
         includes_invalid_width_records=True, resolution_ns=4)
+    return result
+
+
+def edge_timestamp_diagnostics(records, samples, stride, period_ns, tick_ps=4000, tables=None):
+    """Audit V16 sparse timestamps and retain chronological edge drift (no trimming).
+
+    Edge phases are relative to the first valid diagnostic frame. They include
+    source/clock/path motion and cannot establish an independent pin reference.
+    """
+    expected_ids = list(range(1, len(records)+1, stride))
+    if [s[0] for s in samples] != expected_ids:
+        raise RuntimeError("Sparse diagnostic frame IDs/count do not match width records")
+    pairs = []
+    valid_coarse_pairs = 0
+    for frame, rise, fall in samples:
+        r = records[frame-1]
+        if r[0] != frame:
+            raise RuntimeError("Sparse diagnostic record sequence mismatch")
+        if r[1] & 1:
+            if ((fall-rise) & 0xffffffff) != r[2]:
+                raise RuntimeError("Sparse edge timestamps disagree with coarse width")
+            valid_coarse_pairs += 1
+            # A coarse fallback does not have qualified fine edge timing.
+            # Keep its raw pair and full-width record, but do not apply a LUT
+            # to invalid codes in the per-edge phase diagnostic.
+            if tables is not None and not r[1] & 512:
+                continue
+            pairs.append((r, rise, fall))
+    result = dict(stride=stride, sampled=len(samples), valid_pairs=len(pairs),
+                  valid_coarse_pairs=valid_coarse_pairs,
+                  fine_ineligible_pairs=valid_coarse_pairs-len(pairs),
+                  units="ns", calibrated_edges=tables is not None,
+                  frame_ids=[], rise_phase_ns=[], fall_phase_ns=[])
+    for edge, column, tick_column in (("RISE", 3, 1), ("FALL", 4, 2)):
+        last_tick = None
+        unwrapped = 0
+        phase = []
+        for r, rise, fall in pairs:
+            tick = (rise, fall)[tick_column-1]
+            if last_tick is not None:
+                unwrapped += ((tick-last_tick+(1 << 31)) & 0xffffffff)-(1 << 31)
+            last_tick = tick
+            correction = tables[edge][r[column]] if tables is not None else 0
+            phase.append(unwrapped*tick_ps-correction
+                         -(r[0]-pairs[0][0][0])*period_ns*1000)
+        relative = (np.asarray(phase)-phase[0])/1000 if phase else np.asarray([])
+        result[edge.lower()+"_phase_ns"] = relative.tolist()
+        result[edge.lower()+"_drift"] = width_distribution(relative)
+    result["frame_ids"] = [p[0][0] for p in pairs]
+    differential = np.asarray(result["fall_phase_ns"])-np.asarray(result["rise_phase_ns"])
+    result["width_change_ns"] = differential.tolist()
+    result["width_change_distribution"] = width_distribution(differential)
     return result
 
 
@@ -489,7 +558,7 @@ class Bench:
                     capacity=int(rp.ask("TDC:WIDTH:CAPACITY?")),
                     bitstream_label=self.config["bitstream_label"],
                     implementation_wns_ns=self.config.get("implementation_wns_ns"))
-        expected_version = int(self.config.get("expected_width_version", 14))
+        expected_version = int(self.config.get("expected_width_version", 16))
         if info["width_version"] != expected_version or info["tick_ps"] != 4000 or info["taps"] != 512:
             raise RuntimeError(f"Load the matching bitstream: expected VERSION={expected_version}, "
                                "TICK=4000, TAPS=512; " + str(info))
@@ -507,9 +576,20 @@ class Bench:
             try:
                 offset = int(rp.ask("TDC:WIDTH:OFFSET?"))
             except Exception as exc:
-                raise RuntimeError("V14 requires matching API/SCPI with TDC:WIDTH:OFFSET: " + str(exc)) from exc
+                raise RuntimeError("V14+ requires matching API/SCPI with TDC:WIDTH:OFFSET: " + str(exc)) from exc
             if not 0 <= offset <= 262140 or offset % 4:
                 raise RuntimeError("Invalid frame-offset readback")
+        info["minimum_period_ns"] = 500 if info["width_version"] >= 10 else 1000
+        if info["width_version"] >= 16:
+            try:
+                minimum = int(rp.ask("TDC:WIDTH:MINIMUM:PERIOD?"))
+                stride, capacity = map(int, rp.ask("TDC:WIDTH:DIAGNOSTIC:CONFIG?").split(","))
+            except Exception as exc:
+                raise RuntimeError("V16 needs the updated API and SCPI server (MINIMUM:PERIOD and DIAGNOSTIC commands): " + str(exc)) from exc
+            if minimum < 200 or minimum % 4 or stride != 64 or capacity != (info["capacity"]+stride-1)//stride:
+                raise RuntimeError("Invalid V16 minimum period or diagnostic configuration")
+            info.update(minimum_period_ns=minimum, diagnostic_stride=stride,
+                        diagnostic_capacity=capacity)
         if rp.ask("PULSE:PIN?") != "DIO1_P":
             raise RuntimeError("Unexpected FPGA window output pin")
         return info
@@ -583,6 +663,75 @@ class Bench:
 
     def acquire(self, label, frequency_hz, width_ns, frames=None, fine=False,
                 reference_ns=None, window_ns=None, stimulus="pulse"):
+        """Optionally restart incomplete pulse bursts, retaining every attempt.
+
+        Enable phase_retries in notebook config. Acceptance uses completeness
+        only, never width error, fine validity or a desired LUT distribution.
+        DC is acquired once: retrying a false-positive control could hide a fault.
+        """
+        if not self.config.get("phase_retries", False) or stimulus != "pulse":
+            return self._acquire_once(label, frequency_hz, width_ns, frames, fine,
+                                      reference_ns, window_ns, stimulus)
+        limit = self.config.get("phase_retry_max_attempts", 50)
+        delay = float(self.config.get("phase_retry_delay_s", 0.2))
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
+            raise ValueError("phase_retry_max_attempts must be an integer in 1..1000")
+        if not math.isfinite(delay) or not 0 <= delay <= 10:
+            raise ValueError("phase_retry_delay_s must be in 0..10 seconds")
+        ledger_path = self.directory / f"{self.sequence+1:04d}_{label}_retries.json"
+        ledger = dict(label=label, started_utc=utc_now(), policy="restart_until_complete_v1",
+                      max_attempts=limit, attempts=[], accepted_attempt=None,
+                      total_frames=0, total_complete_pulses=0,
+                      phase_lock_verified=False,
+                      note="Measurements are conditioned on complete-frame bursts. Rejected attempts remain saved; accepted-burst yield is not unconditional capture efficiency or synchronization.")
+        for number in range(1, limit+1):
+            context = dict(policy=ledger["policy"], attempt=number, max_attempts=limit,
+                           ledger_path=str(ledger_path), conditioned_on_complete_burst=True)
+            print(f"{label}: source-start attempt {number}/{limit}", flush=True)
+            try:
+                capture = self._acquire_once(label, frequency_hz, width_ns, frames, fine,
+                                             reference_ns, window_ns, stimulus, context)
+                if not capture["acquisition_ok"] or capture["cleanup_errors"]:
+                    raise RuntimeError("Retry stopped: acquisition integrity or output cleanup failed")
+                s = capture["summary"]
+                accepted = s["complete_pulses"] == capture["frames_requested"]
+                ledger["total_frames"] += s["total_frames"]
+                ledger["total_complete_pulses"] += s["complete_pulses"]
+                ledger["attempts"].append(dict(attempt=number, accepted=accepted,
+                    capture_files=capture["capture_files"], complete=s["complete_pulses"],
+                    frames=s["total_frames"], flag_counts=s["flag_counts"]))
+                ledger["complete_fraction_all_attempts"] = (
+                    ledger["total_complete_pulses"]/max(1, ledger["total_frames"]))
+                print(f"  {s['complete_pulses']}/{capture['frames_requested']} complete; "
+                      + ("accepted" if accepted else "saved; " +
+                         ("restarting sources" if number < limit else "attempt limit reached")), flush=True)
+                if accepted:
+                    ledger["accepted_attempt"] = number
+                    ledger["finished_utc"] = utc_now()
+                    capture["phase_retry"].update(accepted=True,
+                        complete_fraction_all_attempts=ledger["complete_fraction_all_attempts"],
+                        total_frames_all_attempts=ledger["total_frames"])
+                    self.save_capture(Path(capture["capture_files"]["json"]).with_suffix(""), capture)
+                    save_json(ledger_path, ledger)
+                    return capture
+                save_json(ledger_path, ledger)
+            except BaseException as exc:
+                ledger["failure"] = f"{type(exc).__name__}: {exc}"
+                ledger["failed_attempt"] = number
+                ledger["finished_utc"] = utc_now()
+                save_json(ledger_path, ledger)
+                raise
+            if number < limit:
+                time.sleep(delay)
+        ledger["finished_utc"] = utc_now()
+        ledger["failure"] = "No fully complete pulse burst within attempt limit"
+        save_json(ledger_path, ledger)
+        raise RuntimeError(f"{label}: no {capture['frames_requested']}/{capture['frames_requested']} "
+                           f"complete burst after {limit} source starts. All attempts saved: {ledger_path}. "
+                           "Increase PHASE_RETRY_MAX_ATTEMPTS or investigate alignment/drift; periods were unchanged.")
+
+    def _acquire_once(self, label, frequency_hz, width_ns, frames=None, fine=False,
+                      reference_ns=None, window_ns=None, stimulus="pulse", retry_context=None):
         if self.image is None:
             raise RuntimeError("Run preflight after loading the bitstream")
         if stimulus not in ("pulse", "dc_low") or (stimulus == "dc_low" and fine):
@@ -592,13 +741,18 @@ class Bench:
             raise ValueError("Frames must be an integer within hardware capacity")
         self.sequence += 1
         stem = self.directory / f"{self.sequence:04d}_{label}"
+        if retry_context is not None:
+            stem = stem.with_name(stem.name + f"_attempt_{retry_context['attempt']:02d}")
         capture = dict(label=label, started_utc=utc_now(), records=[], image=dict(self.image),
                        stimulus=stimulus,
                        fine_requested=bool(fine), acquisition_ok=False, cleanup_errors=[],
                        reference_ns=None, reference_source="AWG readback (nominal, not traceable)")
+        capture["capture_files"] = {ext: str(stem.with_suffix("."+ext)) for ext in ("csv", "json")}
+        if retry_context is not None:
+            capture["phase_retry"] = dict(retry_context, accepted=False)
         awg, rp = None, None
         try:
-            minimum_period = 500 if self.image["width_version"] >= 10 else 1000
+            minimum_period = self.image["minimum_period_ns"]
             plan = plan_matched_period(frequency_hz, minimum_period, window_ns)
             capture["timing"] = plan
             capture["return_window_ns"] = None
@@ -652,6 +806,11 @@ class Bench:
                            expected_complete_fraction=None,
                            target_complete_fraction=1.0,
                            overspeed_input=False)
+            settling = {"awg_s": float(self.config.get("settle_s", 0.05)),
+                        "launch_s": float(self.config.get("launch_settle_s", 0.0))}
+            if any(not math.isfinite(v) or not 0 <= v <= 10 for v in settling.values()):
+                raise ValueError("AWG and launch settling times must be finite, between 0 and 10 seconds")
+            capture["settling"] = settling
             if stimulus == "dc_low":
                 capture["awg_pulse_setup_before_dc"] = settings
                 capture["awg"] = awg.dc_low()
@@ -689,8 +848,14 @@ class Bench:
             if fine and rp.ask("TDC:WIDTH:CALIBRATION:ACTIVATE?") not in ("1", "ON"):
                 raise RuntimeError("Fine correction did not activate")
             awg.on()
-            time.sleep(float(self.config.get("settle_s", 0.05)))
+            awg_on_time = time.monotonic()
+            time.sleep(settling["awg_s"])
             rp.write("PULSE:OUTPUT ON")
+            launch_on_time = time.monotonic()
+            time.sleep(settling["launch_s"])
+            capture["settling"].update(
+                awg_on_to_arm_s=time.monotonic()-awg_on_time,
+                launch_on_to_arm_s=time.monotonic()-launch_on_time)
             rp.write(f"TDC:WIDTH:ARM {count}")
             capture["status"] = rp.idle(float(self.config.get("host_timeout_s", 30)))
             rp.write("PULSE:OUTPUT OFF")
@@ -717,6 +882,20 @@ class Bench:
                            for r, delay in zip(batch, latencies)):
                         raise RuntimeError("Launch latency flags/data integrity mismatch")
                     capture["latency_ticks"].extend(latencies)
+            if self.image["width_version"] >= 16:
+                stride = self.image["diagnostic_stride"]
+                samples = capture["edge_tick_samples"] = []
+                diagnostic_count = (available+stride-1)//stride
+                for start in range(0, diagnostic_count, 128):
+                    size = min(128, diagnostic_count-start)
+                    response = rp.ask(f"TDC:WIDTH:DIAGNOSTIC:EDGE? {start},{size}")
+                    batch = [tuple(map(int, row.split(","))) for row in response.split(";")]
+                    if len(batch) != size or any(len(s) != 3 or any(x < 0 or x > 0xffffffff for x in s) for s in batch):
+                        raise RuntimeError("Malformed sparse edge diagnostic response")
+                    samples.extend(batch)
+                capture["edge_diagnostics"] = edge_timestamp_diagnostics(
+                    capture["records"], samples, stride, window, self.image["tick_ps"],
+                    self.candidate["tables"] if fine else None)
             audit = audit_width_records(capture["records"], self.image["tick_ps"])
             raw_ok = all(r[3] < self.image["taps"] and r[4] < self.image["taps"]
                          for r in capture["records"])
@@ -763,6 +942,10 @@ class Bench:
                     capture["awg_failure_readback"] = awg.last_settings
             capture["awg_scpi_log"] = awg.log if awg is not None else []
             capture["cleanup_errors"] = self._cleanup(rp, awg)
+            if "phase_retry" in capture:
+                capture["phase_retry"]["accepted"] = bool(
+                    capture["acquisition_ok"] and not capture["cleanup_errors"] and "failure" not in capture
+                    and capture.get("summary", {}).get("complete_pulses") == capture.get("frames_requested"))
             capture["finished_utc"] = utc_now()
             self.save_capture(stem, capture)
 
@@ -770,13 +953,16 @@ class Bench:
         with stem.with_suffix(".csv").open("w", newline="", encoding="utf-8") as output:
             writer = csv.writer(output)
             writer.writerow((*FIELDS, "decoded_flags", "rise_status_hex", "fall_status_hex",
-                             "launch_to_rise_ticks", "launch_to_rise_ns"))
+                             "launch_to_rise_ticks", "launch_to_rise_ns",
+                             "diagnostic_rise_ticks", "diagnostic_fall_ticks"))
             latency = capture.get("latency_ticks", [])
+            edge_ticks = {s[0]: s[1:] for s in capture.get("edge_tick_samples", [])}
             for index, r in enumerate(capture["records"]):
                 delay = latency[index] if index < len(latency) else None
                 writer.writerow((*r, "|".join(name for b, name in FLAGS.items() if r[1] & (1 << b)),
                                  f"0x{(r[1] >> 16) & 255:02x}", f"0x{(r[1] >> 24) & 255:02x}",
-                                 delay, delay*4 if delay is not None and delay != 65535 else None))
+                                 delay, delay*4 if delay is not None and delay != 65535 else None,
+                                 *edge_ticks.get(r[0], (None, None))))
         save_json(stem.with_suffix(".json"), {k: v for k, v in capture.items()
                                              if k not in ("records", "latency_ticks")})
 
@@ -899,6 +1085,7 @@ def alignment_survey(bench, frequency_hz, width_ns, repeats=4, frames=1024):
                            complete_fraction=s["complete_fraction"], flag_counts=s["flag_counts"],
                            mean_width_ns=s["all_complete"]["mean_ns"],
                            frame_offset_ns=c.get("frame_offset_ns", 0),
+                           phase_retry=c.get("phase_retry"),
                            return_window_ns=c["return_window_ns"],
                            launch_to_rise_ns=s["launch_to_rise_ns"]))
     result = dict(timing_policy="matched_period_v1", points=points,
@@ -908,7 +1095,8 @@ def alignment_survey(bench, frequency_hz, width_ns, repeats=4, frames=1024):
                   association_policy=("shifted_single_frame_v14" if bench.image["width_version"] >= 14 else
                                       "launch_window_spill_v13" if bench.image["width_version"] == 13
                                       else "single_frame_v12"),
-                  note="V14 shifts full-period frames by a configured offset; v12 has no offset. Both reject boundary-cut pulses. Software restarts do not command a known phase. Fixed compensation needs stable relative phase; inspect all failures and use scope/triggered stimulus for alignment. No frequency detuning is applied.")
+                  phase_retries=bool(bench.config.get("phase_retries", False)),
+                  note="Software restarts do not command a known phase. When phase retries are enabled, each point is the first fully complete burst and its retry ledger retains every rejected start. Accepted yields are conditioned on startup/frame fit, not proof of clock lock or unconditional capture efficiency. No frequency detuning is applied.")
     save_json(bench.directory / "alignment_survey.json", result)
     return result, captures
 
@@ -933,7 +1121,8 @@ def signal_identity_check(bench, frequency_hz=997003., frames=4096):
         point = dict(requested_ns=width, readback_ns=capture["awg"]["width_ns"],
                      measured_ns=measured, complete_pulses=summary["complete_pulses"],
                      complete_fraction=summary["complete_fraction"],
-                     expected_complete_fraction=summary["expected_complete_fraction"])
+                     expected_complete_fraction=summary["expected_complete_fraction"],
+                     phase_retry=capture.get("phase_retry"))
         points.append(point)
         try:
             quality_guard(capture)
@@ -1002,6 +1191,10 @@ def build_candidate(captures, minimum_samples=50000, minimum_bins=32, known_dead
                      status="candidate; requires fresh validation",
                      assumption="Uniform asynchronous phase over 4000 ps. Frame selection may bias density; cross-frequency agreement is necessary, not proof.")
     candidate["timing_policy"] = next(iter(timing_policies))
+    candidate["phase_retry"] = [dict(label=c["label"], **c["phase_retry"])
+                                for c in captures if c.get("phase_retry")]
+    if candidate["phase_retry"]:
+        candidate["limitations"].append("Source starts were repeated until a complete-frame burst was obtained. LUT and precision results describe selected bursts; all rejected starts are retained in retry ledgers. This does not establish unconditional efficiency or synchronization and may bias fine-phase coverage.")
     if candidate["timing_policy"] == "matched_period_v1":
         candidate["limitations"].append("AWG/frame periods match nominally. Equal periods do not prove uniform fine-clock phase coverage or phase lock; frame-selection bias must be assessed independently.")
         candidate["assumption"] = ("Code density still requires uniform edge phase over 4000 ps. "
@@ -1082,35 +1275,75 @@ def precision_comparison(coarse, fine):
     return result
 
 
-def fit_width_reference(captures):
-    """Host-only affine correction. Never alters the FPGA fine LUTs."""
-    means, reference = [], []
+def fit_width_reference(captures, model="offset", minimum_reference_ns=100.,
+                        maximum_std_ns=0.15, maximum_block_span_ns=0.25):
+    """Host-only bias correction from stable full captures, with explicit exclusions.
+
+    A fixed offset does not infer a clock scale from width-dependent bias or
+    drifting captures. Affine fitting is opt-in and requires three stable widths.
+    Limits apply to complete captures, not selected samples or reference errors.
+    Neither model corrects narrow-pulse nonlinearity or qualifies absolute accuracy.
+    """
+    if model not in ("offset", "affine"):
+        raise ValueError("Width reference model must be offset or affine")
+    if any(not math.isfinite(v) or v < 0 for v in
+           (minimum_reference_ns, maximum_std_ns, maximum_block_span_ns)):
+        raise ValueError("Width reference gates must be finite and nonnegative")
+    captures = list(captures)
+    means, reference, accepted, excluded = [], [], [], []
     for c in captures:
+        if c.get("reference_ns") is None or not math.isfinite(c["reference_ns"]) or c["reference_ns"] <= 0:
+            raise ValueError("Width reference must be finite and positive")
         quality_guard(c)
         selected = rows(c, calibrated=True)
         if len(selected) < 100 or len(selected)/len(rows(c)) < 0.99:
             raise RuntimeError("Width reference fit needs >=99% calibrated complete pulses")
         if any(c.get("previously_unseen_codes", {}).values()):
             raise RuntimeError("Validation observed previously uncalibrated fine codes")
-        means.append(float(selected[:, 5].mean()/1000))
+        values = selected[:, 5].astype(float)/1000
+        distribution = width_distribution(values)
+        reasons = []
+        if c["reference_ns"] < minimum_reference_ns:
+            reasons.append("reference below minimum training width")
+        if values.std(ddof=1) > maximum_std_ns:
+            reasons.append("full-capture SD exceeds stability gate")
+        if distribution["block_mean_span_ns"] > maximum_block_span_ns:
+            reasons.append("chronological block-mean span exceeds stability gate")
+        if reasons:
+            excluded.append(dict(label=c["label"], reasons=reasons,
+                                 std_ns=float(values.std(ddof=1)), distribution=distribution))
+            continue
+        means.append(float(values.mean()))
         reference.append(c["reference_ns"])
-    if len(means) < 3 or np.ptp(means) < 40:
-        raise ValueError("Use >=3 training widths spanning >=40 ns")
-    scale, offset = np.linalg.lstsq(np.column_stack((means, np.ones(len(means)))), reference, rcond=None)[0]
+        accepted.append(c)
+    if not means:
+        raise ValueError("No stable training captures passed the width reference gates")
+    if model == "affine":
+        if len(set(reference)) < 3 or np.ptp(means) < 40:
+            raise ValueError("Affine fit needs >=3 stable training widths spanning >=40 ns")
+        scale, offset = np.linalg.lstsq(np.column_stack((means, np.ones(len(means)))), reference, rcond=None)[0]
+    else:
+        scale, offset = 1., float(np.mean(np.asarray(reference)-means))
     if not 0.9 <= scale <= 1.1:
         raise RuntimeError("Implausible width scale; diagnose capture before fitting")
-    return dict(model="reference_ns = scale * measured_ns + offset_ns", scale=float(scale),
+    return dict(model="reference_ns = scale * measured_ns + offset_ns", model_kind=model,
+                scale=float(scale),
                 offset_ns=float(offset), training_means_ns=means, training_reference_ns=reference,
                 training_span_ns=[min(means), max(means)],
-                reference_sources=sorted({c["reference_source"] for c in captures}),
-                training_labels=[c["label"] for c in captures],
+                reference_sources=sorted({c["reference_source"] for c in accepted}),
+                training_labels=[c["label"] for c in accepted],
+                considered_training_labels=[c["label"] for c in captures],
+                excluded_training_captures=excluded,
+                gates=dict(minimum_reference_ns=minimum_reference_ns,
+                           maximum_std_ns=maximum_std_ns,
+                           maximum_block_span_ns=maximum_block_span_ns),
                 note="Nominal AWG-reference transfer unless independent scope widths supplied. Not a traceable clock calibration.")
 
 
 def validate_width_reference(model, captures):
     result = []
     for c in captures:
-        if c["label"] in model["training_labels"]:
+        if c["label"] in model.get("considered_training_labels", model["training_labels"]):
             raise ValueError("Width validation must use captures not used for fitting")
         quality_guard(c)
         selected = rows(c, calibrated=True)
@@ -1122,6 +1355,7 @@ def validate_width_reference(model, captures):
                            raw_error_ns=float(values.mean()-c["reference_ns"]),
                            corrected_error_ns=float(corrected.mean()-c["reference_ns"]),
                            corrected_std_ns=float(corrected.std(ddof=1)),
+                           distribution=width_distribution(corrected),
                            extrapolation=not model["training_span_ns"][0] <= values.mean() <= model["training_span_ns"][1],
                            previously_unseen_codes=c.get("previously_unseen_codes", {})))
     return result

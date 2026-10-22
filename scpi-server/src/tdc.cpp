@@ -210,6 +210,32 @@ scpi_result_t RP_TdcWidthTimeout(scpi_t* context) {
     int result=rp_TdcWidthSetTimeout(v);
     return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width timeout failed",false);
 }
+scpi_result_t RP_TdcWidthMinimumPeriodQ(scpi_t* context) {
+    uint32_t v=0; int result=rp_TdcWidthGetMinimumPeriod(&v);
+    return tdc_u32(context,result,v,"Width minimum period query failed");
+}
+scpi_result_t RP_TdcWidthDiagnosticConfigQ(scpi_t* context) {
+    uint32_t stride=0,capacity=0;
+    int result=rp_TdcWidthGetDiagnostics(&stride,&capacity);
+    if(result!=RP_OK) return tdc_error(context,result,"Width diagnostic configuration failed",true);
+    std::ostringstream response; response<<stride<<','<<capacity;
+    SCPI_ResultMnemonic(context,response.str().c_str()); return SCPI_RES_OK;
+}
+scpi_result_t RP_TdcWidthDiagnosticEdgeQ(scpi_t* context) {
+    uint32_t start=0,count=0;
+    if(!tdc_param_u32(context,&start,"Missing diagnostic sample index.") ||
+       !tdc_param_u32(context,&count,"Missing diagnostic sample count.")) return SCPI_RES_ERR;
+    if(count==0 || count>128) return tdc_error(context,RP_EOOR,"Read 1..128 diagnostic samples",true);
+    std::vector<rp_tdc_width_edge_ticks_t> values(count);
+    int result=rp_TdcWidthReadEdgeTicks(start,values.data(),count);
+    if(result!=RP_OK) return tdc_error(context,result,"Width edge diagnostic read failed",true);
+    std::ostringstream response;
+    for(uint32_t i=0;i<count;++i) {
+        if(i) response<<';';
+        response<<values[i].cycle_id<<','<<values[i].rise_ticks<<','<<values[i].fall_ticks;
+    }
+    SCPI_ResultMnemonic(context,response.str().c_str()); return SCPI_RES_OK;
+}
 scpi_result_t RP_TdcWidthTimeoutQ(scpi_t* context) {
     uint32_t v=0; int result=rp_TdcWidthGetTimeout(&v);
     return tdc_u32(context,result,v,"Width timeout query failed");

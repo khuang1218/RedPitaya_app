@@ -71,6 +71,9 @@ int main() {
         {"TDC:WIDTh:COUNt?", RP_TdcWidthCountQ},
         {"TDC:WIDTh:CAPacity?", RP_TdcWidthCapacityQ},
         {"TDC:WIDTh:TICK?", RP_TdcWidthTickQ},
+        {"TDC:WIDTh:MINimum:PERiod?", RP_TdcWidthMinimumPeriodQ},
+        {"TDC:WIDTh:DIAGnostic:CONFig?", RP_TdcWidthDiagnosticConfigQ},
+        {"TDC:WIDTh:DIAGnostic:EDGE?", RP_TdcWidthDiagnosticEdgeQ},
         {"TDC:WIDTh:DATA?", RP_TdcWidthDataQ},
         {"TDC:WIDTh:CALibration:ACTivate", RP_TdcWidthCalibration},
         SCPI_CMD_LIST_END
@@ -124,12 +127,12 @@ int main() {
     assert(rp_TdcWidthArm(16)==RP_OK && hw[TDC_WIDTH_COMMAND/4]==1);
     assert(hw[TDC_WIDTH_REQUEST_COUNT/4]==16 && hw[TDC_WIDTH_TIMEOUT/4]==532);
     hw[TDC_WIDTH_STATUS/4]=RP_TDC_WIDTH_DONE;hw[TDC_WIDTH_COUNT/4]=1;
-    hw[TDC_WIDTH_RECORD/4]=1;hw[(TDC_WIDTH_RECORD+4)/4]=257;
+    hw[TDC_WIDTH_RECORD/4]=1;hw[(TDC_WIDTH_RECORD+4)/4]=0x01010101;
     hw[(TDC_WIDTH_RECORD+8)/4]=25;hw[(TDC_WIDTH_RECORD+12)/4]=(6u<<16)|2u;
     hw[TDC_WIDTH_PS/4]=100000;hw[TDC_WIDTH_TICK/4]=4000;
     rp_tdc_width_result_t record;
     assert(rp_TdcWidthRead(0,&record,1)==RP_OK);
-    assert(record.cycle_id==1 && record.flags==257 && record.coarse_ticks==25 &&
+    assert(record.cycle_id==1 && record.flags==0x01010101 && record.coarse_ticks==25 &&
            record.rise_raw==2 && record.fall_raw==6 && record.width_ps==100000);
     assert(rp_TdcWidthRead(1,&record,1)==RP_EOOR);
     assert(rp_TdcWidthRead(0,nullptr,1)==RP_UIA);
@@ -137,7 +140,7 @@ int main() {
     uint16_t lut=100;
     assert(rp_TdcWidthWriteLut(false,512,&lut,1)==RP_EOOR);
     assert(rp_TdcWidthActivateCalibration(true)==RP_EIPV);
-    send("TDC:WIDTH:DATA? 0,1\n");assert(response=="1,257,25,2,6,100000\r\n");
+    send("TDC:WIDTH:DATA? 0,1\n");assert(response=="1,16843009,25,2,6,100000\r\n");
     send("TDC:WIDT:CAP?\n");assert(response=="1024\r\n");
     send("TDC:WIDTH:TICK?\n");assert(response=="4000\r\n");
     send("TDC:WIDTH:ARM 0\n");assert(api_error==RP_EOOR);
@@ -160,6 +163,44 @@ int main() {
     hw[TDC_WIDTH_STATUS/4]=RP_TDC_WIDTH_DONE|RP_TDC_WIDTH_OVERFLOW;
     uint32_t width_status=0;
     assert(rp_TdcWidthGetStatus(&width_status)==RP_OK && (width_status&RP_TDC_WIDTH_OVERFLOW));
+    // V16: hardware-driven minimum and sparse timestamps. The mocked bus
+    // cannot model indexed RAM; HDL tests cover actual address/data alignment.
+    uint32_t minimum=0,stride=0,capacity=0;
+    assert(rp_TdcWidthGetMinimumPeriod(&minimum)==RP_OK && minimum==1000);
+    assert(rp_TdcWidthGetMinimumPeriod(nullptr)==RP_UIA);
+    assert(rp_TdcWidthGetDiagnostics(&stride,&capacity)==RP_EUF);
+    hw[TDC_ID_VERSION_OFFSET/4]=0x54444310;
+    hw[TDC_WIDTH_STATUS/4]=RP_TDC_WIDTH_DONE;
+    hw[TDC_WIDTH_FRAME_FEATURE/4]=0x46524d01;
+    hw[TDC_WIDTH_DIAG_FEATURE/4]=0x44424701;
+    hw[TDC_WIDTH_DIAG_STRIDE/4]=64;
+    hw[TDC_WIDTH_MIN_PERIOD/4]=200;
+    hw[TDC_WIDTH_READ_READY/4]=1;
+    hw[TDC_WIDTH_FRAME_OFFSET/4]=0;
+    assert(rp_TdcWidthGetDiagnostics(nullptr,&capacity)==RP_UIA);
+    assert(rp_TdcWidthGetDiagnostics(&stride,&capacity)==RP_OK && stride==64 && capacity==256);
+    send("TDC:WIDTH:MIN:PER?\n");assert(response=="200\r\n");
+    send("TDC:WIDTH:DIAG:CONF?\n");assert(response=="64,256\r\n");
+    test_period=200;test_high=100;
+    assert(rp_TdcWidthArm(16384)==RP_OK && hw[TDC_WIDTH_TIMEOUT/4]==132);
+    test_period=196;test_high=98;assert(rp_TdcWidthArm(1)==RP_EOOR);
+    hw[TDC_WIDTH_RECORD/4]=1;
+    hw[TDC_WIDTH_DIAG_RISE/4]=0xfffffff0u;
+    hw[TDC_WIDTH_DIAG_FALL/4]=9;
+    rp_tdc_width_edge_ticks_t edge;
+    assert(rp_TdcWidthReadEdgeTicks(0,&edge,1)==RP_OK && edge.cycle_id==1 &&
+           edge.rise_ticks==0xfffffff0u && edge.fall_ticks==9);
+    send("TDC:WIDTH:DIAG:EDGE? 0,1\n");assert(response=="1,4294967280,9\r\n");
+    assert(rp_TdcWidthReadEdgeTicks(256,&edge,1)==RP_EOOR);
+    assert(rp_TdcWidthReadEdgeTicks(0,nullptr,1)==RP_UIA);
+    hw[TDC_WIDTH_RECORD/4]=16321;
+    assert(rp_TdcWidthReadEdgeTicks(255,&edge,1)==RP_OK && hw[TDC_WIDTH_INDEX/4]==16320);
+    hw[TDC_WIDTH_COUNT/4]=65;hw[TDC_WIDTH_RECORD/4]=65;
+    assert(rp_TdcWidthReadEdgeTicks(1,&edge,1)==RP_OK && hw[TDC_WIDTH_INDEX/4]==64);
+    assert(rp_TdcWidthReadEdgeTicks(2,&edge,1)==RP_EOOR);
+    hw[TDC_WIDTH_RECORD/4]=1;assert(rp_TdcWidthReadEdgeTicks(1,&edge,1)==RP_EUF);
+    hw[TDC_WIDTH_READ_READY/4]=0;assert(rp_TdcWidthReadEdgeTicks(0,&edge,1)==RP_EUF);
+    hw[TDC_WIDTH_STATUS/4]=RP_TDC_WIDTH_BUSY;assert(rp_TdcWidthReadEdgeTicks(0,&edge,1)==RP_EIPV);
     tdc_Release();
-    puts("PASS: TDC input and width API/SCPI; v5/v6/v7 compatibility, 16384 ARM/last-record read, overflow, busy/rate/duty guards and parameter errors");
+    puts("PASS: TDC input/width API and actual SCPI parser; legacy compatibility, V16 200 ns minimum, sparse diagnostics, busy/rate/duty/range/ready/sequence guards");
 }

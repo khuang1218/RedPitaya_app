@@ -69,6 +69,10 @@
 
 #define TDC_WIDTH_FRAME_OFFSET     0x158u // v14: frame shift in ns
 #define TDC_WIDTH_FRAME_FEATURE    0x15cu // FRM v1 capability signature
+#define TDC_WIDTH_DIAG_FEATURE     0x160u // V16 DBG v1
+#define TDC_WIDTH_DIAG_STRIDE      0x164u
+#define TDC_WIDTH_DIAG_RISE        0x168u
+#define TDC_WIDTH_DIAG_FALL        0x16cu
 
 #define TDC_ID_MASK               0xffffff00u
 #define TDC_ID_EXPECTED           0x54444300u
@@ -292,7 +296,56 @@ int rp_TdcWidthGetStatus(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_STATUS, 
 int rp_TdcWidthGetCount(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_COUNT, v); }
 int rp_TdcWidthGetCapacity(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_CAPACITY, v); }
 int rp_TdcWidthGetTick(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_TICK, v); }
+int rp_TdcWidthGetMinimumPeriod(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_MIN_PERIOD, v); }
 int rp_TdcWidthGetTimeout(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_TIMEOUT, v); }
+
+static int tdc_WidthDiagnostics(uint32_t* stride, uint32_t* capacity) {
+    int result=tdc_CheckWidth();
+    if(result!=RP_OK) return result;
+    if((tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET)&0xffu)<16u ||
+       tdc_ReadRegSettled(TDC_WIDTH_DIAG_FEATURE)!=0x44424701u) return RP_EUF;
+    *stride=tdc_ReadRegSettled(TDC_WIDTH_DIAG_STRIDE);
+    const uint32_t depth=tdc_ReadRegSettled(TDC_WIDTH_CAPACITY);
+    if(*stride==0 || depth==0) return RP_EUF;
+    *capacity=depth / *stride + (depth % *stride != 0);
+    return RP_OK;
+}
+int rp_TdcWidthGetDiagnostics(uint32_t* stride, uint32_t* capacity) {
+    if(!stride || !capacity) return RP_UIA;
+    pthread_mutex_lock(&tdc_mutex);
+    int result=tdc_WidthDiagnostics(stride,capacity);
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+int rp_TdcWidthReadEdgeTicks(uint32_t start, rp_tdc_width_edge_ticks_t* values, uint32_t count) {
+    if(!values && count) return RP_UIA;
+    pthread_mutex_lock(&tdc_mutex);
+    uint32_t stride=0,capacity=0;
+    int result=tdc_WidthDiagnostics(&stride,&capacity);
+    if(result==RP_OK) result=tdc_WidthIdle();
+    if(result==RP_OK) {
+        const uint32_t records=tdc_ReadRegSettled(TDC_WIDTH_COUNT);
+        const uint32_t available=records/stride+(records%stride!=0);
+        if(available>capacity) result=RP_EUF;
+        else if(start>available || count>available-start) result=RP_EOOR;
+    }
+    for(uint32_t i=0; result==RP_OK && i<count; ++i) {
+        const uint32_t index=(start+i)*stride;
+        tdc_WriteReg(TDC_WIDTH_INDEX,index);
+        // Same settled-address protocol as normal WIDTH record reads.
+        bool ready=false;
+        for(unsigned attempt=0;attempt<64u;++attempt) {
+            if(tdc_ReadRegSettled(TDC_WIDTH_READ_READY)&1u) {ready=true;break;}
+        }
+        if(!ready) {result=RP_EUF;break;}
+        values[i].cycle_id=tdc_ReadRegSettled(TDC_WIDTH_RECORD);
+        values[i].rise_ticks=tdc_ReadRegSettled(TDC_WIDTH_DIAG_RISE);
+        values[i].fall_ticks=tdc_ReadRegSettled(TDC_WIDTH_DIAG_FALL);
+        if(values[i].cycle_id!=index+1u) result=RP_EUF;
+    }
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
 
 // Bounds are stored in fast-clock ticks, independent of the pulse period.
 // The rise window must fit inside one period; the FALL may spill into the next.
