@@ -21,7 +21,8 @@ FLAG_BITS = {
     0: "VALID", 1: "NO_RISE", 2: "NO_FALL", 3: "HIGH_AT_START",
     4: "EXTRA_EDGES", 5: "TRIGGER_TIMEOUT", 7: "FINE_INVALID",
     8: "COARSE_ONLY", 9: "CALIBRATED", 10: "BOUNDARY",
-    11: "SATURATED", 12: "OUT_OF_RANGE",
+    11: "SATURATED", 12: "OUT_OF_RANGE", 13: "LATENCY_OVERFLOW",
+    14: "CROSS_FRAME", 15: "RETURN_LATE",
 }
 STATUS_BITS = {
     0: "BUSY", 1: "CAPTURING", 2: "PROCESSING", 3: "DONE",
@@ -45,7 +46,7 @@ def audit_width_records(records, tick_ps=4000):
         if cycle != expected_id:
             reasons.append("cycle_id")
         if flags & 1:
-            if flags & (2 | 4 | 8 | 16 | 32 | 1024 | 2048 | 4096):
+            if flags & (2 | 4 | 8 | 16 | 32 | 1024 | 2048 | 4096 | 32768):
                 reasons.append("valid_with_frame_error")
             mode = flags & (256 | 512)
             if mode not in (256, 512):
@@ -174,6 +175,7 @@ def acquire_framed_width_burst(config, plan, client_factory=Client, fine_enabled
         _wait_idle(client, timeout)
         capacity = int(_query(client, "TDC:WIDTH:CAPACITY?"))
         capture["capacity"] = capacity
+        capture["width_version"] = int(_query(client, "TDC:WIDTH:VERSION?"))
         capture["tick_ps"] = int(_query(client, "TDC:WIDTH:TICK?"))
         if config["sample_count"] > capacity:
             raise RuntimeError(f"Image capacity is {capacity}; requested {config['sample_count']}. Check the loaded image")
@@ -192,6 +194,31 @@ def acquire_framed_width_burst(config, plan, client_factory=Client, fine_enabled
         readback = tuple(map(int, _query(client, "PULSE:TIMING?").split(",")))
         if readback != (plan["period_ns"], plan["high_ns"]):
             raise RuntimeError(f"Pulse timing readback mismatch: {readback}")
+        if capture["width_version"] == 13:
+            lo = config.get("return_delay_min_ns", 0)
+            hi = config.get("return_delay_max_ns")
+            if hi is None:
+                hi = lo + plan["period_ns"]
+            if (isinstance(lo, bool) or isinstance(hi, bool)
+                    or not isinstance(lo, int) or not isinstance(hi, int)
+                    or lo < 0 or hi <= lo or hi > 262136 or lo % 4 or hi % 4
+                    or hi-lo > plan["period_ns"]):
+                raise ValueError("Invalid v13 return window: use 4 ns bounds, 0<=min<max<=262136 ns and span<=period")
+            client.write(f"TDC:WIDTH:DELAY {lo},{hi}")
+            if tuple(map(int, _query(client, "TDC:WIDTH:DELAY?").split(","))) != (lo, hi):
+                raise RuntimeError("V13 return-window readback mismatch")
+            capture["return_window_ns"] = dict(minimum=lo, maximum_exclusive=hi)
+        offset = config.get("frame_offset_ns", 0)
+        if (isinstance(offset, bool) or not isinstance(offset, int) or offset % 4
+                or not 0 <= offset <= 262140 or offset >= plan["period_ns"]):
+            raise ValueError("Frame offset requires a 4 ns multiple, 0..262140 ns and offset < period")
+        if capture["width_version"] >= 14:
+            client.write(f"TDC:WIDTH:OFFSET {offset}")
+            if int(_query(client, "TDC:WIDTH:OFFSET?")) != offset:
+                raise RuntimeError("Frame-offset readback mismatch")
+        elif offset:
+            raise RuntimeError("Frame offset requires V14 hardware/API/SCPI")
+        capture["frame_offset_ns"] = offset
         if _query(client, "TDC:INPUT?").upper() != config.get("input_mode", "SINGLE"):
             raise RuntimeError("TDC input selection readback mismatch")
         if fine_enabled and _query(client, "TDC:WIDTH:CALIBRATION:ACTIVATE?") not in ("1", "ON"):

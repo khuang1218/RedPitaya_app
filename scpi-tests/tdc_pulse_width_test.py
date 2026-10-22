@@ -10,6 +10,9 @@ import argparse
 import csv
 import socket
 import time
+from pathlib import Path
+
+from local_data import results_directory
 
 
 class Client:
@@ -49,20 +52,27 @@ def main():
     parser.add_argument("--count", type=int, default=16)
     parser.add_argument("--input", choices=["SINGLE", "LVDS"], default="SINGLE")
     parser.add_argument("--timeout", type=float, default=10)
-    parser.add_argument("--csv", help="save all returned records, including errors")
+    parser.add_argument("--return-delay-min-ns", type=int, default=0, help="V13 earliest return RISE, 4 ns grid")
+    parser.add_argument("--return-delay-max-ns", type=int, default=None, help="V13 exclusive RISE deadline; default MIN+period")
+    parser.add_argument("--frame-offset-ns", type=int, default=0, help="V14 acquisition-frame shift; 4 ns grid, less than period")
+    parser.add_argument("--csv", help="save all records; relative paths go under local tdc_width_results")
     parser.add_argument("--quiet", action="store_true", help="print a summary instead of every pulse")
     args = parser.parse_args()
-    if not 0 < args.frequency <= 1_000_000 or args.count < 1:
-        parser.error("initial build requires 0 < frequency <= 1 MHz and a positive count")
+    if not 0 < args.frequency <= 2_000_000 or args.count < 1:
+        parser.error("requires 0 < frequency <= 2 MHz (v10 above 1 MHz) and a positive count")
     if args.timeout <= 0:
         parser.error("timeout must be positive")
-    period = max(1000, round(1e9 / args.frequency / 4) * 4)
+    period = max(500, round(1e9 / args.frequency / 4) * 4)
     if period > 8_589_934_588:
         parser.error("period exceeds the pulse generator range")
     client = Client(args.host, args.port)
     records = []
     try:
         client.send("*CLS")
+        version = int(client.query("TDC:WIDTH:VERSION?"))
+        client.check()
+        if version < 10 and period < 1000:
+            raise RuntimeError("Frame rates above 1 MHz require the v10 bitstream")
         capacity = int(client.query("TDC:WIDTH:CAPACITY?"))
         client.check()
         if args.count > capacity:
@@ -84,6 +94,29 @@ def main():
         actual = client.query("PULSE:TIMING?")
         if actual != f"{period},{period // 2}":
             raise RuntimeError("Unexpected output timing: " + actual)
+        if version == 13:
+            lo = args.return_delay_min_ns
+            hi = args.return_delay_max_ns if args.return_delay_max_ns is not None else lo+period
+            if lo < 0 or hi <= lo or hi > 262136 or lo % 4 or hi % 4 or hi-lo > period:
+                raise ValueError("V13 bounds require 4 ns grid, 0<=min<max<=262136 ns, span<=period")
+            client.write(f"TDC:WIDTH:DELAY {lo},{hi}")
+            actual_bounds = tuple(map(int, client.query("TDC:WIDTH:DELAY?").split(",")))
+            client.check()
+            if actual_bounds != (lo, hi):
+                raise RuntimeError("V13 return-window readback mismatch")
+            print(f"Return RISE: [{lo}, {hi}) ns; FALL may cross into the next window")
+        elif args.return_delay_min_ns or args.return_delay_max_ns is not None:
+            raise RuntimeError("Return-delay configuration requires V13 hardware/API/server")
+        offset = args.frame_offset_ns
+        if offset < 0 or offset > 262140 or offset % 4 or offset >= period:
+            raise ValueError("Frame offset requires 4 ns grid, 0..262140 ns and offset < period")
+        if version >= 14:
+            client.write(f"TDC:WIDTH:OFFSET {offset}")
+            if int(client.query("TDC:WIDTH:OFFSET?")) != offset:
+                raise RuntimeError("Frame-offset readback mismatch")
+        elif offset:
+            raise RuntimeError("Frame offset requires V14 hardware/API/SCPI")
+        print(f"Acquisition frame offset: {offset} ns (full period retained)")
         print(f"Trigger: {1e9 / period:g} Hz, 50%; input: {args.input}")
         # Start the source first. ARM begins at the next complete output cycle;
         # its watchdog need not wait for a second SCPI command/network round trip.
@@ -117,10 +150,18 @@ def main():
                 print(f"{cycle:5d} 0x{flags:08x} {width/1000:10.3f} {rise:8d} {fall:8d} {label}")
         print(f"Received {len(records)} records; invalid: {sum(not r[1] & 1 for r in records)}; status=0x{status:x}")
         if args.csv:
-            with open(args.csv, "w", newline="", encoding="utf-8") as output:
+            csv_path = Path(args.csv).expanduser()
+            if not csv_path.is_absolute():
+                csv_root = results_directory("tdc_width_results").resolve()
+                csv_path = (csv_root / csv_path).resolve()
+                if csv_root not in csv_path.parents:
+                    raise ValueError("Relative --csv path must stay within local tdc_width_results")
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", newline="", encoding="utf-8") as output:
                 writer = csv.writer(output)
                 writer.writerow(["cycle_id", "flags", "coarse_ticks", "rise_raw", "fall_raw", "width_ps"])
                 writer.writerows(records)
+            print("Saved raw records:", csv_path)
         if status & (16 | 32 | 64 | 128) or not status & 8 or count != args.count:
             raise RuntimeError(f"Incomplete/error burst: status=0x{status:x}, records={count}")
         if len(records) != count or any(r[0] != i+1 for i, r in enumerate(records)):

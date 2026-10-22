@@ -31,3 +31,13 @@
 build
 scpi-tests/tdc_sine_results/
 scpi-tests/__pycache__/
+
+# Measurement captures, LUTs, plots and local simulation output belong outside
+# the checkout. Notebooks use scpi-tests/local_data.py for their default paths.
+/scpi-tests/tdc_*_results/
+/xsim.dir/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+/tdc_calibration_*.json
+/tdc_mmcm_random_delay_test_*.json

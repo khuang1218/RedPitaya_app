@@ -31,6 +31,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from local_data import results_directory
+
 import redpitaya_scpi as scpi
 
 # CLKFBOUT_MULT_F=8 and the MMCME2_ADV fine phase-shift granularity of 1/56th
@@ -238,8 +240,10 @@ def main() -> None:
     # plain register write, free to reorder however phase order dictates.
     execution_order = sorted(targets, key=lambda t: t["commanded_phase_steps"])
 
-    output = args.output or Path("tdc_mmcm_random_delay_test_{}.json".format(
-        datetime.now().strftime("%Y%m%d_%H%M%S")))
+    output = args.output or (
+        results_directory("tdc_internal_results") / "tdc_mmcm_random_delay_test_{}.json".format(
+            datetime.now().strftime("%Y%m%d_%H%M%S")))
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     rp = scpi.scpi(args.host, timeout=10.0)
     results = []

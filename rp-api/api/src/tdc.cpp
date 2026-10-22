@@ -63,6 +63,13 @@
 #define TDC_WIDTH_MIN_PERIOD       0x144u
 #define TDC_WIDTH_READ_READY       0x148u // TDC v8+: index/width pipeline settled
 
+#define TDC_WIDTH_DELAY_MIN        0x14cu // v13: ticks from launch to acceptance origin
+#define TDC_WIDTH_DELAY_MAX        0x150u // v13: exclusive RISE deadline, launch-relative
+#define TDC_WIDTH_LATENCY          0x154u // v13: selected record, coarse ticks, FFFF invalid
+
+#define TDC_WIDTH_FRAME_OFFSET     0x158u // v14: frame shift in ns
+#define TDC_WIDTH_FRAME_FEATURE    0x15cu // FRM v1 capability signature
+
 #define TDC_ID_MASK               0xffffff00u
 #define TDC_ID_EXPECTED           0x54444300u
 
@@ -287,6 +294,97 @@ int rp_TdcWidthGetCapacity(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_CAPACI
 int rp_TdcWidthGetTick(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_TICK, v); }
 int rp_TdcWidthGetTimeout(uint32_t* v) { return tdc_WidthValue(TDC_WIDTH_TIMEOUT, v); }
 
+// Bounds are stored in fast-clock ticks, independent of the pulse period.
+// The rise window must fit inside one period; the FALL may spill into the next.
+static int tdc_CheckReturnTiming() {
+    int result = tdc_CheckWidth();
+    if (result != RP_OK) return result;
+    return (tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET) & 0xffu) == 13u ? RP_OK : RP_EUF;
+}
+
+int rp_TdcWidthSetDelay(uint32_t minimum_ns, uint32_t maximum_ns) {
+    if (minimum_ns % 4u || maximum_ns % 4u || maximum_ns <= minimum_ns ||
+        maximum_ns > 65534u * 4u) return RP_EOOR;
+    pthread_mutex_lock(&tdc_mutex);
+    int result = tdc_CheckReturnTiming();
+    if (result == RP_OK) result = tdc_WidthIdle();
+    if (result == RP_OK) {
+        tdc_WriteReg(TDC_WIDTH_DELAY_MIN, minimum_ns / 4u);
+        tdc_WriteReg(TDC_WIDTH_DELAY_MAX, maximum_ns / 4u);
+        if (tdc_ReadRegSettled(TDC_WIDTH_DELAY_MIN) != minimum_ns / 4u ||
+            tdc_ReadRegSettled(TDC_WIDTH_DELAY_MAX) != maximum_ns / 4u) result = RP_EIPV;
+    }
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+
+int rp_TdcWidthGetDelay(uint32_t* minimum_ns, uint32_t* maximum_ns) {
+    if (!minimum_ns || !maximum_ns) return RP_UIA;
+    pthread_mutex_lock(&tdc_mutex);
+    int result = tdc_CheckReturnTiming();
+    if (result == RP_OK) {
+        *minimum_ns = tdc_ReadRegSettled(TDC_WIDTH_DELAY_MIN) * 4u;
+        *maximum_ns = tdc_ReadRegSettled(TDC_WIDTH_DELAY_MAX) * 4u;
+    }
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+
+int rp_TdcWidthReadLatency(uint32_t start, uint32_t* ticks, uint32_t count) {
+    if (!ticks && count) return RP_UIA;
+    pthread_mutex_lock(&tdc_mutex);
+    int result = tdc_CheckReturnTiming();
+    if (result == RP_OK) result = tdc_WidthIdle();
+    if (result == RP_OK) {
+        const uint32_t available = tdc_ReadRegSettled(TDC_WIDTH_COUNT);
+        if (start > available || count > available-start) result = RP_EOOR;
+    }
+    for (uint32_t i=0; result==RP_OK && i<count; ++i) {
+        tdc_WriteReg(TDC_WIDTH_INDEX,start+i);
+        bool ready=false;
+        for (unsigned attempt=0; attempt<64u; ++attempt) {
+            if (tdc_ReadRegSettled(TDC_WIDTH_READ_READY) & 1u) { ready=true; break; }
+        }
+        if (!ready) { result=RP_EUF; break; }
+        ticks[i]=tdc_ReadRegSettled(TDC_WIDTH_LATENCY);
+        if (ticks[i]>65535u) result=RP_EUF;
+    }
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+
+static int tdc_CheckFrameOffset() {
+    int result = tdc_CheckWidth();
+    if (result != RP_OK) return result;
+    if ((tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET) & 0xffu) < 14u) return RP_EUF;
+    return tdc_ReadRegSettled(TDC_WIDTH_FRAME_FEATURE) == 0x46524d01u ? RP_OK : RP_EUF;
+}
+
+int rp_TdcWidthSetFrameOffset(uint32_t nanoseconds) {
+    if (nanoseconds % 4u || nanoseconds > 262140u) return RP_EOOR;
+    pthread_mutex_lock(&tdc_mutex);
+    int result = tdc_CheckFrameOffset();
+    if (result == RP_OK) result = tdc_WidthIdle();
+    uint64_t period=0,high=0;
+    if (result == RP_OK) result = rp_PulseGetTiming(&period,&high);
+    if (result == RP_OK && nanoseconds >= period) result = RP_EOOR;
+    if (result == RP_OK) {
+        tdc_WriteReg(TDC_WIDTH_FRAME_OFFSET,nanoseconds);
+        if (tdc_ReadRegSettled(TDC_WIDTH_FRAME_OFFSET) != nanoseconds) result = RP_EIPV;
+    }
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+
+int rp_TdcWidthGetFrameOffset(uint32_t* nanoseconds) {
+    if (!nanoseconds) return RP_UIA;
+    pthread_mutex_lock(&tdc_mutex);
+    int result = tdc_CheckFrameOffset();
+    if (result == RP_OK) *nanoseconds = tdc_ReadRegSettled(TDC_WIDTH_FRAME_OFFSET);
+    pthread_mutex_unlock(&tdc_mutex);
+    return result;
+}
+
 int rp_TdcWidthArm(uint32_t count) {
     int result = tdc_WidthIdle();
     if (result != RP_OK) return result;
@@ -303,6 +401,17 @@ int rp_TdcWidthArm(uint32_t count) {
     result = rp_PulseGetEnabled(&pulse_enabled);
     if (result != RP_OK) return result;
     if (!pulse_enabled) return RP_EIPV;
+    if ((tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET) & 0xffu) == 13u) {
+        const uint32_t lo=tdc_ReadRegSettled(TDC_WIDTH_DELAY_MIN);
+        const uint32_t hi=tdc_ReadRegSettled(TDC_WIDTH_DELAY_MAX);
+        if (hi<=lo || (uint64_t)(hi-lo)*4u>period) return RP_EOOR;
+    }
+    if ((tdc_ReadRegSettled(TDC_ID_VERSION_OFFSET) & 0xffu) >= 14u) {
+        result = tdc_CheckFrameOffset();
+        if (result != RP_OK) return result;
+        const uint32_t shift=tdc_ReadRegSettled(TDC_WIDTH_FRAME_OFFSET);
+        if (shift % 4u || shift > 262140u || shift >= period) return RP_EOOR;
+    }
     // Allow two periods for starting/stopped-trigger watchdog, with margin.
     uint64_t timeout = period / 2u + 32u; // 2*period / 4 ns
     if (timeout > UINT32_MAX) return RP_EOOR;
@@ -351,7 +460,7 @@ static bool tdc_WidthRecordConsistent(const rp_tdc_width_result_t& r,
     const uint32_t frame_errors = RP_TDC_WIDTH_NO_RISE | RP_TDC_WIDTH_NO_FALL |
         RP_TDC_WIDTH_HIGH_AT_START | RP_TDC_WIDTH_EXTRA_EDGES |
         RP_TDC_WIDTH_TRIGGER_TIMEOUT | RP_TDC_WIDTH_BOUNDARY |
-        RP_TDC_WIDTH_SATURATED | RP_TDC_WIDTH_OUT_OF_RANGE;
+        RP_TDC_WIDTH_SATURATED | RP_TDC_WIDTH_OUT_OF_RANGE | RP_TDC_WIDTH_RETURN_LATE;
     if (r.flags & frame_errors) return false;
     const uint32_t mode = r.flags & (RP_TDC_WIDTH_COARSE_ONLY | RP_TDC_WIDTH_CALIBRATED);
     if (mode != RP_TDC_WIDTH_COARSE_ONLY && mode != RP_TDC_WIDTH_CALIBRATED)

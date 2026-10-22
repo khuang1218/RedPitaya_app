@@ -115,9 +115,13 @@ static int16_t bnet_ReadCaptureSample(uint32_t index) {
 }
 
 static int bnet_CheckMap() {
-    if (bnet_reg != NULL)
-        return RP_OK;
-    return bnet_Init();
+    int ret = bnet_Init();
+    if (ret != RP_OK)
+        return ret;
+    // A DISABLE_BNET image acknowledges this region with zero-filled reads.
+    // Keep global API initialization usable, but reject hardware operations.
+    return bnet_ReadRegSettled(BNET_STREAM_COUNT_OFFSET) == BNET_MAX_STREAMS ?
+               RP_OK : RP_EUF;
 }
 
 static int bnet_SetConfigBit(uint32_t mask, bool enable) {

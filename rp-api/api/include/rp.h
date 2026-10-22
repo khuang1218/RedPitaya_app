@@ -695,6 +695,11 @@ int rp_TdcGetInput(rp_tdc_input_t* input);
 #define RP_TDC_WIDTH_BOUNDARY       (1u << 10)
 #define RP_TDC_WIDTH_SATURATED      (1u << 11)
 #define RP_TDC_WIDTH_OUT_OF_RANGE   (1u << 12)
+/* V13 informational flags: overflow invalidates latency only; crossing a
+ * nominal frame boundary does not invalidate an otherwise complete width. */
+#define RP_TDC_WIDTH_LATENCY_OVERFLOW (1u << 13)
+#define RP_TDC_WIDTH_CROSS_FRAME     (1u << 14)
+#define RP_TDC_WIDTH_RETURN_LATE     (1u << 15)
 #define RP_TDC_WIDTH_BUSY           (1u << 0)
 #define RP_TDC_WIDTH_CAPTURING      (1u << 1)
 #define RP_TDC_WIDTH_PROCESSING     (1u << 2)
@@ -711,6 +716,24 @@ typedef struct {
     uint16_t fall_raw;
     uint32_t width_ps;
 } rp_tdc_width_result_t;
+/** V13 return RISE interval [minimum_ns, maximum_ns), relative to launch.
+ * Both bounds are multiples of 4 ns, 0 <= min < max <= 262136 ns.
+ * Configure while idle; interval length must not exceed the launch period.
+ * Records retain a pending rise for one extra period for its falling edge.
+ * Coarse delay is relative to the internal launch marker, not a calibrated pin. */
+int rp_TdcWidthSetDelay(uint32_t minimum_ns, uint32_t maximum_ns);
+int rp_TdcWidthGetDelay(uint32_t* minimum_ns, uint32_t* maximum_ns);
+/** V13 per-record coarse launch-to-RISE ticks (4 ns); 65535 means unavailable.
+ * Indexed identically to width records. No fine LUT/pin-delay correction. */
+int rp_TdcWidthReadLatency(uint32_t start, uint32_t* ticks, uint32_t count);
+/** V14 (v12-derived) acquisition-frame shift relative to each launch marker.
+ * Configure while WIDTH idle, after setting the launch period. Units: ns,
+ * multiples of 4, 0..262140, strictly less than the launch period. Default 0.
+ * Frames retain the full launch period. This does not alter the output pulse,
+ * lock external clocks, or retain edges across the shifted frame boundary.
+ * Experimental v13 DELAY/LATENCY functions are unsupported on v14. */
+int rp_TdcWidthSetFrameOffset(uint32_t nanoseconds);
+int rp_TdcWidthGetFrameOffset(uint32_t* nanoseconds);
 int rp_TdcWidthArm(uint32_t count);
 int rp_TdcWidthAbort(void);
 int rp_TdcWidthClear(void);

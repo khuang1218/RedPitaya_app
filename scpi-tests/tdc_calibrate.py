@@ -10,6 +10,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from local_data import results_directory
+
 import redpitaya_scpi as scpi
 
 
@@ -312,8 +314,10 @@ def main() -> None:
     if args.events <= 0 or args.clock_period_ps <= 0 or args.chunk <= 0:
         parser.error("events, clock period and chunk must be positive")
 
-    output = args.output or Path("tdc_calibration_{}.json".format(
-        datetime.now().strftime("%Y%m%d_%H%M%S")))
+    output = args.output or (
+        results_directory("tdc_calibration_results") / "tdc_calibration_{}.json".format(
+            datetime.now().strftime("%Y%m%d_%H%M%S")))
+    output.parent.mkdir(parents=True, exist_ok=True)
     rp = scpi.scpi(args.host, timeout=max(10.0, args.poll_seconds * 4.0))
     try:
         send(rp, "TDC:TEST:INTernal {}".format("ON" if args.internal else "OFF"))

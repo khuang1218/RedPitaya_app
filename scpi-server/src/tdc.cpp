@@ -132,12 +132,53 @@ scpi_result_t RP_TdcInputQ(scpi_t* context) {
     return SCPI_RES_OK;
 }
 
+scpi_result_t RP_TdcWidthDelay(scpi_t* context) {
+    uint32_t lo=0,hi=0;
+    if (!tdc_param_u32(context,&lo,"Missing minimum return delay in ns.") ||
+        !tdc_param_u32(context,&hi,"Missing exclusive maximum return delay in ns.")) return SCPI_RES_ERR;
+    int result=rp_TdcWidthSetDelay(lo,hi);
+    return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"V13 idle return-delay configuration failed",false);
+}
+scpi_result_t RP_TdcWidthDelayQ(scpi_t* context) {
+    uint32_t lo=0,hi=0;
+    int result=rp_TdcWidthGetDelay(&lo,&hi);
+    if (result!=RP_OK) return tdc_error(context,result,"V13 return-delay readback failed",true);
+    std::ostringstream response; response<<lo<<','<<hi;
+    SCPI_ResultMnemonic(context,response.str().c_str()); return SCPI_RES_OK;
+}
+scpi_result_t RP_TdcWidthLatencyQ(scpi_t* context) {
+    uint32_t start=0,count=0;
+    if (!tdc_param_u32(context,&start,"Missing latency start index.") ||
+        !tdc_param_u32(context,&count,"Missing latency count.")) return SCPI_RES_ERR;
+    if (count==0 || count>128u) return tdc_error(context,RP_EOOR,"Latency read supports 1..128 records",true);
+    std::vector<uint32_t> values(count);
+    int result=rp_TdcWidthReadLatency(start,values.data(),count);
+    if (result!=RP_OK) return tdc_error(context,result,"V13 return latency read failed",true);
+    std::ostringstream response;
+    for(uint32_t i=0;i<count;++i) { if(i) response<<','; response<<values[i]; }
+    SCPI_ResultMnemonic(context,response.str().c_str()); return SCPI_RES_OK;
+}
+
+scpi_result_t RP_TdcWidthOffset(scpi_t* context) {
+    uint32_t ns=0;
+    if (!tdc_param_u32(context,&ns,"Missing acquisition frame offset in ns.")) return SCPI_RES_ERR;
+    int result=rp_TdcWidthSetFrameOffset(ns);
+    return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,
+        "V14 frame offset requires idle WIDTH, 4 ns grid, 0..262140 ns and offset < launch period",false);
+}
+scpi_result_t RP_TdcWidthOffsetQ(scpi_t* context) {
+    uint32_t ns=0;
+    int result=rp_TdcWidthGetFrameOffset(&ns);
+    if (result!=RP_OK) return tdc_error(context,result,"V14 frame offset readback failed",true);
+    SCPI_ResultUInt32(context,ns); return SCPI_RES_OK;
+}
+
 scpi_result_t RP_TdcWidthArm(scpi_t* context) {
     uint32_t count = 0;
     if (!tdc_param_u32(context, &count, "Missing pulse-width burst length.")) return SCPI_RES_ERR;
     int result = rp_TdcWidthArm(count);
     return result == RP_OK ? SCPI_RES_OK :
-        tdc_error(context, result, "Width ARM requires v5+, legacy TDC OFF and pulse_gen ON at <=1 MHz, 50% duty", false);
+        tdc_error(context, result, "Width ARM requires legacy TDC OFF, pulse_gen ON at supported period/50% duty, and valid frame timing for this HDL version", false);
 }
 scpi_result_t RP_TdcWidthAbort(scpi_t* context) {
     int result = rp_TdcWidthAbort();
