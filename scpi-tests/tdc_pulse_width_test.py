@@ -59,8 +59,8 @@ def main():
     parser.add_argument("--csv", help="save all records; relative paths go under local tdc_width_results")
     parser.add_argument("--quiet", action="store_true", help="print a summary instead of every pulse")
     args = parser.parse_args()
-    if not 0 < args.frequency <= 5_000_000 or args.count < 1:
-        parser.error("requires 0 < frequency <= 5 MHz (V16 above 2 MHz) and a positive count")
+    if not 0 < args.frequency <= 25_000_000 or args.count < 1:
+        parser.error("requires 0 < frequency <= 25 MHz (V17 above 5 MHz) and a positive count")
     if args.timeout <= 0:
         parser.error("timeout must be positive")
     period = math.ceil(1e9 / args.frequency / 4-1e-9) * 4
@@ -76,7 +76,7 @@ def main():
         if version >= 16:
             minimum = int(client.query("TDC:WIDTH:MINIMUM:PERIOD?"))
             client.check()
-            if minimum < 200 or minimum % 4:
+            if minimum < (40 if version >= 17 else 200) or minimum % 4:
                 raise RuntimeError("Invalid hardware minimum period")
         if 1e9/args.frequency < minimum-1e-9:
             raise RuntimeError(f"Requested rate exceeds this image's {minimum} ns minimum frame period")

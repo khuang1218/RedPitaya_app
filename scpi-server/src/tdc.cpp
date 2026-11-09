@@ -29,6 +29,12 @@ static const scpi_choice_def_t scpi_TdcInput[] = {
     SCPI_CHOICE_LIST_END
 };
 
+static rp_channel_t tdc_channel(scpi_t* context) {
+    int32_t number = 1;
+    SCPI_CommandNumbers(context, &number, 1, 1);
+    return number == 1 ? RP_CH_1 : number == 2 ? RP_CH_2 : static_cast<rp_channel_t>(-1);
+}
+
 static scpi_result_t tdc_error(scpi_t* context, int result, const char* message, bool query) {
     RP_LOG_CRIT("%s: %s", message, rp_GetError(result));
     if (query && getRetOnError())
@@ -57,14 +63,14 @@ static scpi_result_t tdc_result(scpi_t* context, int result, const rp_tdc_result
 
 static bool tdc_param_u32(scpi_t* context, uint32_t* value, const char* message) {
     if (!SCPI_ParamUInt32(context, value, true)) {
-        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, message);
+        SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "%s", message);
         return false;
     }
     return true;
 }
 
-scpi_result_t RP_TdcReset(scpi_t*) {
-    int result = rp_TdcReset();
+scpi_result_t RP_TdcReset(scpi_t* context) {
+    int result = rp_TdcResetCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK : SCPI_RES_ERR;
 }
 
@@ -74,13 +80,13 @@ scpi_result_t RP_TdcEnable(scpi_t* context) {
         SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing TDC enable state.");
         return SCPI_RES_ERR;
     }
-    int result = rp_TdcEnable(enable);
+    int result = rp_TdcEnableCh(tdc_channel(context), enable);
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to set TDC enable", false);
 }
 
 scpi_result_t RP_TdcEnableQ(scpi_t* context) {
     bool enable = false;
-    int result = rp_TdcGetEnable(&enable);
+    int result = rp_TdcGetEnableCh(tdc_channel(context), &enable);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to get TDC enable", true);
     SCPI_ResultBool(context, enable);
@@ -93,13 +99,13 @@ scpi_result_t RP_TdcMode(scpi_t* context) {
         SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing TDC mode.");
         return SCPI_RES_ERR;
     }
-    int result = rp_TdcSetMode((rp_tdc_mode_t)mode);
+    int result = rp_TdcSetModeCh(tdc_channel(context), (rp_tdc_mode_t)mode);
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to set TDC mode", false);
 }
 
 scpi_result_t RP_TdcModeQ(scpi_t* context) {
     rp_tdc_mode_t mode = RP_TDC_MODE_SINGLE;
-    int result = rp_TdcGetMode(&mode);
+    int result = rp_TdcGetModeCh(tdc_channel(context), &mode);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to get TDC mode", true);
     const char* name = nullptr;
@@ -115,14 +121,14 @@ scpi_result_t RP_TdcInput(scpi_t* context) {
         SCPI_LOG_ERR(SCPI_ERROR_ILLEGAL_PARAMETER_VALUE, "Expected LVDS or SINGLE.");
         return SCPI_RES_ERR;
     }
-    int result = rp_TdcSetInput((rp_tdc_input_t)input);
+    int result = rp_TdcSetInputCh(tdc_channel(context), (rp_tdc_input_t)input);
     return result == RP_OK ? SCPI_RES_OK :
            tdc_error(context, result, "Failed to select TDC input (requires v4+, disabled and idle)", false);
 }
 
 scpi_result_t RP_TdcInputQ(scpi_t* context) {
     rp_tdc_input_t input = RP_TDC_INPUT_LVDS;
-    int result = rp_TdcGetInput(&input);
+    int result = rp_TdcGetInputCh(tdc_channel(context), &input);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to get TDC input", true);
     const char* name = nullptr;
@@ -136,12 +142,12 @@ scpi_result_t RP_TdcWidthDelay(scpi_t* context) {
     uint32_t lo=0,hi=0;
     if (!tdc_param_u32(context,&lo,"Missing minimum return delay in ns.") ||
         !tdc_param_u32(context,&hi,"Missing exclusive maximum return delay in ns.")) return SCPI_RES_ERR;
-    int result=rp_TdcWidthSetDelay(lo,hi);
+    int result=rp_TdcWidthSetDelayCh(tdc_channel(context), lo,hi);
     return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"V13 idle return-delay configuration failed",false);
 }
 scpi_result_t RP_TdcWidthDelayQ(scpi_t* context) {
     uint32_t lo=0,hi=0;
-    int result=rp_TdcWidthGetDelay(&lo,&hi);
+    int result=rp_TdcWidthGetDelayCh(tdc_channel(context), &lo,&hi);
     if (result!=RP_OK) return tdc_error(context,result,"V13 return-delay readback failed",true);
     std::ostringstream response; response<<lo<<','<<hi;
     SCPI_ResultMnemonic(context,response.str().c_str()); return SCPI_RES_OK;
@@ -152,7 +158,7 @@ scpi_result_t RP_TdcWidthLatencyQ(scpi_t* context) {
         !tdc_param_u32(context,&count,"Missing latency count.")) return SCPI_RES_ERR;
     if (count==0 || count>128u) return tdc_error(context,RP_EOOR,"Latency read supports 1..128 records",true);
     std::vector<uint32_t> values(count);
-    int result=rp_TdcWidthReadLatency(start,values.data(),count);
+    int result=rp_TdcWidthReadLatencyCh(tdc_channel(context), start,values.data(),count);
     if (result!=RP_OK) return tdc_error(context,result,"V13 return latency read failed",true);
     std::ostringstream response;
     for(uint32_t i=0;i<count;++i) { if(i) response<<','; response<<values[i]; }
@@ -162,13 +168,13 @@ scpi_result_t RP_TdcWidthLatencyQ(scpi_t* context) {
 scpi_result_t RP_TdcWidthOffset(scpi_t* context) {
     uint32_t ns=0;
     if (!tdc_param_u32(context,&ns,"Missing acquisition frame offset in ns.")) return SCPI_RES_ERR;
-    int result=rp_TdcWidthSetFrameOffset(ns);
+    int result=rp_TdcWidthSetFrameOffsetCh(tdc_channel(context), ns);
     return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,
         "V14 frame offset requires idle WIDTH, 4 ns grid, 0..262140 ns and offset < launch period",false);
 }
 scpi_result_t RP_TdcWidthOffsetQ(scpi_t* context) {
     uint32_t ns=0;
-    int result=rp_TdcWidthGetFrameOffset(&ns);
+    int result=rp_TdcWidthGetFrameOffsetCh(tdc_channel(context), &ns);
     if (result!=RP_OK) return tdc_error(context,result,"V14 frame offset readback failed",true);
     SCPI_ResultUInt32(context,ns); return SCPI_RES_OK;
 }
@@ -176,47 +182,47 @@ scpi_result_t RP_TdcWidthOffsetQ(scpi_t* context) {
 scpi_result_t RP_TdcWidthArm(scpi_t* context) {
     uint32_t count = 0;
     if (!tdc_param_u32(context, &count, "Missing pulse-width burst length.")) return SCPI_RES_ERR;
-    int result = rp_TdcWidthArm(count);
+    int result = rp_TdcWidthArmCh(tdc_channel(context), count);
     return result == RP_OK ? SCPI_RES_OK :
-        tdc_error(context, result, "Width ARM requires legacy TDC OFF, pulse_gen ON at supported period/50% duty, and valid frame timing for this HDL version", false);
+        tdc_error(context, result, "Width ARM requires legacy TDC OFF, pulse_gen ON at supported period and HIGH/LOW >=8 ns, and valid frame timing for this HDL version", false);
 }
 scpi_result_t RP_TdcWidthAbort(scpi_t* context) {
-    int result = rp_TdcWidthAbort();
+    int result = rp_TdcWidthAbortCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width abort failed",false);
 }
 scpi_result_t RP_TdcWidthClear(scpi_t* context) {
-    int result = rp_TdcWidthClear();
+    int result = rp_TdcWidthClearCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width clear failed",false);
 }
 scpi_result_t RP_TdcWidthStatusQ(scpi_t* context) {
-    uint32_t v=0; int result=rp_TdcWidthGetStatus(&v);
+    uint32_t v=0; int result=rp_TdcWidthGetStatusCh(tdc_channel(context), &v);
     return tdc_u32(context,result,v,"Width status failed");
 }
 scpi_result_t RP_TdcWidthCountQ(scpi_t* context) {
-    uint32_t v=0; int result=rp_TdcWidthGetCount(&v);
+    uint32_t v=0; int result=rp_TdcWidthGetCountCh(tdc_channel(context), &v);
     return tdc_u32(context,result,v,"Width count failed");
 }
 scpi_result_t RP_TdcWidthCapacityQ(scpi_t* context) {
-    uint32_t v=0; int result=rp_TdcWidthGetCapacity(&v);
+    uint32_t v=0; int result=rp_TdcWidthGetCapacityCh(tdc_channel(context), &v);
     return tdc_u32(context,result,v,"Width capacity failed");
 }
 scpi_result_t RP_TdcWidthTickQ(scpi_t* context) {
-    uint32_t v=0; int result=rp_TdcWidthGetTick(&v);
+    uint32_t v=0; int result=rp_TdcWidthGetTickCh(tdc_channel(context), &v);
     return tdc_u32(context,result,v,"Width tick failed");
 }
 scpi_result_t RP_TdcWidthTimeout(scpi_t* context) {
     uint32_t v=0;
     if(!tdc_param_u32(context,&v,"Missing fast-clock timeout.")) return SCPI_RES_ERR;
-    int result=rp_TdcWidthSetTimeout(v);
+    int result=rp_TdcWidthSetTimeoutCh(tdc_channel(context), v);
     return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width timeout failed",false);
 }
 scpi_result_t RP_TdcWidthMinimumPeriodQ(scpi_t* context) {
-    uint32_t v=0; int result=rp_TdcWidthGetMinimumPeriod(&v);
+    uint32_t v=0; int result=rp_TdcWidthGetMinimumPeriodCh(tdc_channel(context), &v);
     return tdc_u32(context,result,v,"Width minimum period query failed");
 }
 scpi_result_t RP_TdcWidthDiagnosticConfigQ(scpi_t* context) {
     uint32_t stride=0,capacity=0;
-    int result=rp_TdcWidthGetDiagnostics(&stride,&capacity);
+    int result=rp_TdcWidthGetDiagnosticsCh(tdc_channel(context), &stride,&capacity);
     if(result!=RP_OK) return tdc_error(context,result,"Width diagnostic configuration failed",true);
     std::ostringstream response; response<<stride<<','<<capacity;
     SCPI_ResultMnemonic(context,response.str().c_str()); return SCPI_RES_OK;
@@ -227,7 +233,7 @@ scpi_result_t RP_TdcWidthDiagnosticEdgeQ(scpi_t* context) {
        !tdc_param_u32(context,&count,"Missing diagnostic sample count.")) return SCPI_RES_ERR;
     if(count==0 || count>128) return tdc_error(context,RP_EOOR,"Read 1..128 diagnostic samples",true);
     std::vector<rp_tdc_width_edge_ticks_t> values(count);
-    int result=rp_TdcWidthReadEdgeTicks(start,values.data(),count);
+    int result=rp_TdcWidthReadEdgeTicksCh(tdc_channel(context), start,values.data(),count);
     if(result!=RP_OK) return tdc_error(context,result,"Width edge diagnostic read failed",true);
     std::ostringstream response;
     for(uint32_t i=0;i<count;++i) {
@@ -237,12 +243,12 @@ scpi_result_t RP_TdcWidthDiagnosticEdgeQ(scpi_t* context) {
     SCPI_ResultMnemonic(context,response.str().c_str()); return SCPI_RES_OK;
 }
 scpi_result_t RP_TdcWidthTimeoutQ(scpi_t* context) {
-    uint32_t v=0; int result=rp_TdcWidthGetTimeout(&v);
+    uint32_t v=0; int result=rp_TdcWidthGetTimeoutCh(tdc_channel(context), &v);
     return tdc_u32(context,result,v,"Width timeout query failed");
 }
 scpi_result_t RP_TdcWidthVersionQ(scpi_t* context) {
     uint32_t version=0;
-    int result=rp_TdcWidthGetVersion(&version);
+    int result=rp_TdcWidthGetVersionCh(tdc_channel(context), &version);
     return tdc_u32(context,result,version,"Width version query failed");
 }
 static scpi_result_t tdc_width_data(scpi_t* context, bool raw) {
@@ -251,8 +257,8 @@ static scpi_result_t tdc_width_data(scpi_t* context, bool raw) {
        !tdc_param_u32(context,&count,"Missing width record count.")) return SCPI_RES_ERR;
     if(count==0 || count>128) return tdc_error(context,RP_EOOR,"Read 1..128 width records per query",true);
     std::vector<rp_tdc_width_result_t> records(count);
-    int result=raw ? rp_TdcWidthReadRaw(start,records.data(),count) :
-                     rp_TdcWidthRead(start,records.data(),count);
+    int result=raw ? rp_TdcWidthReadRawCh(tdc_channel(context), start,records.data(),count) :
+                     rp_TdcWidthReadCh(tdc_channel(context), start,records.data(),count);
     if(result!=RP_OK) return tdc_error(context,result,
         raw ? "Raw width read failed" :
               "Width read failed or inconsistent hardware record; DATA:RAW? is diagnostic only",true);
@@ -281,7 +287,7 @@ scpi_result_t RP_TdcWidthLutWrite(scpi_t* context) {
         values.push_back((uint16_t)value);
     }
     if(values.empty() || SCPI_ParamErrorOccurred(context)) return SCPI_RES_ERR;
-    int result=rp_TdcWidthWriteLut(edge!=0,start,values.data(),(uint32_t)values.size());
+    int result=rp_TdcWidthWriteLutCh(tdc_channel(context), edge!=0,start,values.data(),(uint32_t)values.size());
     return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width LUT upload failed",false);
 }
 scpi_result_t RP_TdcWidthLutReadQ(scpi_t* context) {
@@ -291,7 +297,7 @@ scpi_result_t RP_TdcWidthLutReadQ(scpi_t* context) {
        !tdc_param_u32(context,&count,"Missing width LUT count.")) return SCPI_RES_ERR;
     if(count==0 || count>512) return tdc_error(context,RP_EOOR,"Invalid width LUT count",true);
     std::vector<uint16_t> values(count);
-    int result=rp_TdcWidthReadLut(edge!=0,start,values.data(),count);
+    int result=rp_TdcWidthReadLutCh(tdc_channel(context), edge!=0,start,values.data(),count);
     if(result!=RP_OK) return tdc_error(context,result,"Width LUT read failed",true);
     std::ostringstream response;
     for(uint32_t i=0;i<count;++i) {if(i) response<<','; response<<values[i];}
@@ -300,29 +306,29 @@ scpi_result_t RP_TdcWidthLutReadQ(scpi_t* context) {
 scpi_result_t RP_TdcWidthCalibration(scpi_t* context) {
     scpi_bool_t enable=FALSE;
     if(!SCPI_ParamBool(context,&enable,true)) return SCPI_RES_ERR;
-    int result=rp_TdcWidthActivateCalibration(enable);
+    int result=rp_TdcWidthActivateCalibrationCh(tdc_channel(context), enable);
     return result==RP_OK ? SCPI_RES_OK : tdc_error(context,result,"Width calibration selection failed",false);
 }
 scpi_result_t RP_TdcWidthCalibrationQ(scpi_t* context) {
-    bool enabled=false;int result=rp_TdcWidthGetCalibration(&enabled);
+    bool enabled=false;int result=rp_TdcWidthGetCalibrationCh(tdc_channel(context), &enabled);
     if(result!=RP_OK) return tdc_error(context,result,"Width calibration query failed",true);
     SCPI_ResultBool(context,enabled);return SCPI_RES_OK;
 }
 
 scpi_result_t RP_TdcTrigger(scpi_t* context) {
-    int result = rp_TdcTrigger();
+    int result = rp_TdcTriggerCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to trigger TDC", false);
 }
 
 scpi_result_t RP_TdcStatusQ(scpi_t* context) {
     uint32_t value = 0;
-    int result = rp_TdcGetStatus(&value);
+    int result = rp_TdcGetStatusCh(tdc_channel(context), &value);
     return tdc_u32(context, result, value, "Failed to read TDC status");
 }
 
 scpi_result_t RP_TdcTapsQ(scpi_t* context) {
     uint32_t value = 0;
-    int result = rp_TdcGetNumTaps(&value);
+    int result = rp_TdcGetNumTapsCh(tdc_channel(context), &value);
     return tdc_u32(context, result, value, "Failed to read TDC tap count");
 }
 
@@ -332,14 +338,14 @@ scpi_result_t RP_TdcInternalTest(scpi_t* context) {
         SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing internal TDC test state.");
         return SCPI_RES_ERR;
     }
-    int result = rp_TdcSetInternalTest(enable);
+    int result = rp_TdcSetInternalTestCh(tdc_channel(context), enable);
     return result == RP_OK ? SCPI_RES_OK :
            tdc_error(context, result, "Failed to set internal TDC test", false);
 }
 
 scpi_result_t RP_TdcInternalTestQ(scpi_t* context) {
     bool enable = false;
-    int result = rp_TdcGetInternalTest(&enable);
+    int result = rp_TdcGetInternalTestCh(tdc_channel(context), &enable);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to get internal TDC test", true);
     SCPI_ResultBool(context, enable);
@@ -349,60 +355,60 @@ scpi_result_t RP_TdcInternalTestQ(scpi_t* context) {
 scpi_result_t RP_TdcLaunchPeriod(scpi_t* context) {
     uint32_t value = 0;
     if (!tdc_param_u32(context, &value, "Missing TDC launch period.")) return SCPI_RES_ERR;
-    int result = rp_TdcSetLaunchPeriod(value);
+    int result = rp_TdcSetLaunchPeriodCh(tdc_channel(context), value);
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to set TDC launch period", false);
 }
 
 scpi_result_t RP_TdcLaunchPeriodQ(scpi_t* context) {
     uint32_t value = 0;
-    int result = rp_TdcGetLaunchPeriod(&value);
+    int result = rp_TdcGetLaunchPeriodCh(tdc_channel(context), &value);
     return tdc_u32(context, result, value, "Failed to read TDC launch period");
 }
 
 scpi_result_t RP_TdcLaunchWidth(scpi_t* context) {
     uint32_t value = 0;
     if (!tdc_param_u32(context, &value, "Missing TDC launch width.")) return SCPI_RES_ERR;
-    int result = rp_TdcSetLaunchWidth(value);
+    int result = rp_TdcSetLaunchWidthCh(tdc_channel(context), value);
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to set TDC launch width", false);
 }
 
 scpi_result_t RP_TdcLaunchWidthQ(scpi_t* context) {
     uint32_t value = 0;
-    int result = rp_TdcGetLaunchWidth(&value);
+    int result = rp_TdcGetLaunchWidthCh(tdc_channel(context), &value);
     return tdc_u32(context, result, value, "Failed to read TDC launch width");
 }
 
 scpi_result_t RP_TdcTimeout(scpi_t* context) {
     uint32_t value = 0;
     if (!tdc_param_u32(context, &value, "Missing TDC timeout.")) return SCPI_RES_ERR;
-    int result = rp_TdcSetTimeout(value);
+    int result = rp_TdcSetTimeoutCh(tdc_channel(context), value);
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to set TDC timeout", false);
 }
 
 scpi_result_t RP_TdcTimeoutQ(scpi_t* context) {
     uint32_t value = 0;
-    int result = rp_TdcGetTimeout(&value);
+    int result = rp_TdcGetTimeoutCh(tdc_channel(context), &value);
     return tdc_u32(context, result, value, "Failed to read TDC timeout");
 }
 
 scpi_result_t RP_TdcFifoCountQ(scpi_t* context) {
     uint32_t value = 0;
-    int result = rp_TdcGetFifoLevel(&value);
+    int result = rp_TdcGetFifoLevelCh(tdc_channel(context), &value);
     return tdc_u32(context, result, value, "Failed to read TDC FIFO level");
 }
 
 scpi_result_t RP_TdcFifoDataQ(scpi_t* context) {
     rp_tdc_result_t result_value = {};
-    return tdc_result(context, rp_TdcReadResult(&result_value), result_value);
+    return tdc_result(context, rp_TdcReadResultCh(tdc_channel(context), &result_value), result_value);
 }
 
 scpi_result_t RP_TdcMeasureQ(scpi_t* context) {
-    int result = rp_TdcTrigger();
+    int result = rp_TdcTriggerCh(tdc_channel(context));
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to trigger TDC measurement", true);
 
     uint32_t timeout_cycles = 0;
-    result = rp_TdcGetTimeout(&timeout_cycles);
+    result = rp_TdcGetTimeoutCh(tdc_channel(context), &timeout_cycles);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC timeout", true);
 
@@ -412,7 +418,7 @@ scpi_result_t RP_TdcMeasureQ(scpi_t* context) {
 
     uint32_t level = 0;
     for (uint64_t elapsed = 0; elapsed <= wait_us; elapsed += 1000u) {
-        result = rp_TdcGetFifoLevel(&level);
+        result = rp_TdcGetFifoLevelCh(tdc_channel(context), &level);
         if (result != RP_OK)
             return tdc_error(context, result, "Failed to read TDC FIFO level", true);
         if (level != 0)
@@ -423,16 +429,16 @@ scpi_result_t RP_TdcMeasureQ(scpi_t* context) {
         return tdc_error(context, RP_EUF, "TDC measurement did not produce a FIFO result", true);
 
     rp_tdc_result_t value = {};
-    return tdc_result(context, rp_TdcReadResult(&value), value);
+    return tdc_result(context, rp_TdcReadResultCh(tdc_channel(context), &value), value);
 }
 
 scpi_result_t RP_TdcMeasureRawQ(scpi_t* context) {
     uint32_t taps = 0;
-    int result = rp_TdcGetNumTaps(&taps);
+    int result = rp_TdcGetNumTapsCh(tdc_channel(context), &taps);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC tap count", true);
     std::vector<uint32_t> words((taps + 31u) / 32u);
-    result = rp_TdcGetRawCapture(0, words.data(), (uint32_t)words.size());
+    result = rp_TdcGetRawCaptureCh(tdc_channel(context), 0, words.data(), (uint32_t)words.size());
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC raw capture", true);
     std::ostringstream response;
@@ -445,26 +451,26 @@ scpi_result_t RP_TdcMeasureRawQ(scpi_t* context) {
 }
 
 scpi_result_t RP_TdcCalibrationClear(scpi_t* context) {
-    int result = rp_TdcCalibrationClearHistogram();
+    int result = rp_TdcCalibrationClearHistogramCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to clear TDC histogram", false);
 }
 
 scpi_result_t RP_TdcCalibrationStart(scpi_t* context) {
     uint32_t events = 0;
     if (!tdc_param_u32(context, &events, "Missing TDC calibration event count.")) return SCPI_RES_ERR;
-    int result = rp_TdcCalibrationStart(events);
+    int result = rp_TdcCalibrationStartCh(tdc_channel(context), events);
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to start TDC calibration", false);
 }
 
 scpi_result_t RP_TdcCalibrationStop(scpi_t* context) {
-    int result = rp_TdcCalibrationStop();
+    int result = rp_TdcCalibrationStopCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to stop TDC calibration", false);
 }
 
 scpi_result_t RP_TdcCalibrationStatusQ(scpi_t* context) {
     uint32_t status = 0;
     uint32_t events = 0;
-    int result = rp_TdcCalibrationGetStatus(&status, &events);
+    int result = rp_TdcCalibrationGetStatusCh(tdc_channel(context), &status, &events);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC calibration status", true);
     std::ostringstream response;
@@ -475,7 +481,7 @@ scpi_result_t RP_TdcCalibrationStatusQ(scpi_t* context) {
 
 scpi_result_t RP_TdcCalibrationHistogramQ(scpi_t* context) {
     uint32_t taps = 0;
-    int result = rp_TdcGetNumTaps(&taps);
+    int result = rp_TdcGetNumTapsCh(tdc_channel(context), &taps);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC tap count", true);
     uint32_t start = 0;
@@ -487,7 +493,7 @@ scpi_result_t RP_TdcCalibrationHistogramQ(scpi_t* context) {
     if (start > taps || count > taps - start)
         return tdc_error(context, RP_EOOR, "TDC histogram range is invalid", true);
     std::vector<uint32_t> values(count);
-    result = rp_TdcCalibrationReadHistogram(start, values.data(), count);
+    result = rp_TdcCalibrationReadHistogramCh(tdc_channel(context), start, values.data(), count);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC histogram", true);
     std::ostringstream response;
@@ -511,7 +517,7 @@ scpi_result_t RP_TdcCalibrationLutWrite(scpi_t* context) {
     }
     if (values.empty())
         return SCPI_RES_ERR;
-    int result = rp_TdcCalibrationWriteLut(start, values.data(), (uint32_t)values.size());
+    int result = rp_TdcCalibrationWriteLutCh(tdc_channel(context), start, values.data(), (uint32_t)values.size());
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to write TDC LUT", false);
 }
 
@@ -521,13 +527,13 @@ scpi_result_t RP_TdcCalibrationLutReadQ(scpi_t* context) {
     if (!tdc_param_u32(context, &start, "Missing TDC LUT start index.") ||
         !tdc_param_u32(context, &count, "Missing TDC LUT count.")) return SCPI_RES_ERR;
     uint32_t taps = 0;
-    int result = rp_TdcGetNumTaps(&taps);
+    int result = rp_TdcGetNumTapsCh(tdc_channel(context), &taps);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC tap count", true);
     if (start > taps || count > taps - start)
         return tdc_error(context, RP_EOOR, "TDC LUT range is invalid", true);
     std::vector<uint16_t> values(count);
-    result = rp_TdcCalibrationReadLut(start, values.data(), count);
+    result = rp_TdcCalibrationReadLutCh(tdc_channel(context), start, values.data(), count);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC LUT", true);
     std::ostringstream response;
@@ -543,13 +549,13 @@ scpi_result_t RP_TdcCalibrationLutActivate(scpi_t* context) {
     scpi_bool_t enable = FALSE;
     if (!SCPI_ParamBool(context, &enable, true))
         return SCPI_RES_ERR;
-    int result = rp_TdcCalibrationActivate(enable);
+    int result = rp_TdcCalibrationActivateCh(tdc_channel(context), enable);
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to activate TDC LUT", false);
 }
 
 scpi_result_t RP_TdcCalibrationLutActivateQ(scpi_t* context) {
     bool enable = false;
-    int result = rp_TdcCalibrationGetActive(&enable);
+    int result = rp_TdcCalibrationGetActiveCh(tdc_channel(context), &enable);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read TDC LUT state", true);
     SCPI_ResultBool(context, enable);
@@ -562,14 +568,14 @@ scpi_result_t RP_TdcMmcmEnable(scpi_t* context) {
         SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing MMCM sweep enable state.");
         return SCPI_RES_ERR;
     }
-    int result = rp_TdcMmcmSetSweepEnable(enable);
+    int result = rp_TdcMmcmSetSweepEnableCh(tdc_channel(context), enable);
     return result == RP_OK ? SCPI_RES_OK :
            tdc_error(context, result, "Failed to set MMCM sweep enable", false);
 }
 
 scpi_result_t RP_TdcMmcmEnableQ(scpi_t* context) {
     bool enable = false;
-    int result = rp_TdcMmcmGetSweepEnable(&enable);
+    int result = rp_TdcMmcmGetSweepEnableCh(tdc_channel(context), &enable);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to get MMCM sweep enable", true);
     SCPI_ResultBool(context, enable);
@@ -577,7 +583,7 @@ scpi_result_t RP_TdcMmcmEnableQ(scpi_t* context) {
 }
 
 scpi_result_t RP_TdcMmcmReset(scpi_t* context) {
-    int result = rp_TdcMmcmReset();
+    int result = rp_TdcMmcmResetCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK : tdc_error(context, result, "Failed to reset MMCM", false);
 }
 
@@ -587,26 +593,26 @@ scpi_result_t RP_TdcMmcmStep(scpi_t* context) {
         SCPI_LOG_ERR(SCPI_ERROR_MISSING_PARAMETER, "Missing MMCM phase step direction.");
         return SCPI_RES_ERR;
     }
-    int result = rp_TdcMmcmPhaseStep(increase != 0);
+    int result = rp_TdcMmcmPhaseStepCh(tdc_channel(context), increase != 0);
     return result == RP_OK ? SCPI_RES_OK :
            tdc_error(context, result, "Failed to request MMCM phase step", false);
 }
 
 scpi_result_t RP_TdcMmcmStatusQ(scpi_t* context) {
     uint32_t value = 0;
-    int result = rp_TdcMmcmGetStatus(&value);
+    int result = rp_TdcMmcmGetStatusCh(tdc_channel(context), &value);
     return tdc_u32(context, result, value, "Failed to read MMCM status");
 }
 
 scpi_result_t RP_TdcMmcmTimeoutClear(scpi_t* context) {
-    int result = rp_TdcMmcmClearTimeout();
+    int result = rp_TdcMmcmClearTimeoutCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK :
            tdc_error(context, result, "Failed to clear MMCM phase-step timeout", false);
 }
 
 scpi_result_t RP_TdcMmcmPhaseCountQ(scpi_t* context) {
     int32_t value = 0;
-    int result = rp_TdcMmcmGetPhaseCount(&value);
+    int result = rp_TdcMmcmGetPhaseCountCh(tdc_channel(context), &value);
     if (result != RP_OK)
         return tdc_error(context, result, "Failed to read MMCM phase count", true);
     SCPI_ResultInt32(context, value);
@@ -614,7 +620,7 @@ scpi_result_t RP_TdcMmcmPhaseCountQ(scpi_t* context) {
 }
 
 scpi_result_t RP_TdcMmcmPhaseClear(scpi_t* context) {
-    int result = rp_TdcMmcmClearPhaseCount();
+    int result = rp_TdcMmcmClearPhaseCountCh(tdc_channel(context));
     return result == RP_OK ? SCPI_RES_OK :
            tdc_error(context, result, "Failed to clear MMCM phase count", false);
 }
@@ -624,13 +630,13 @@ scpi_result_t RP_TdcMmcmCoarseDelay(scpi_t* context) {
     if (!tdc_param_u32(context, &value, "Missing MMCM coarse delay.")) return SCPI_RES_ERR;
     if (value > UINT16_MAX)
         return tdc_error(context, RP_EOOR, "MMCM coarse delay is out of range", false);
-    int result = rp_TdcMmcmSetCoarseDelay((uint16_t)value);
+    int result = rp_TdcMmcmSetCoarseDelayCh(tdc_channel(context), (uint16_t)value);
     return result == RP_OK ? SCPI_RES_OK :
            tdc_error(context, result, "Failed to set MMCM coarse delay", false);
 }
 
 scpi_result_t RP_TdcMmcmCoarseDelayQ(scpi_t* context) {
     uint16_t value = 0;
-    int result = rp_TdcMmcmGetCoarseDelay(&value);
+    int result = rp_TdcMmcmGetCoarseDelayCh(tdc_channel(context), &value);
     return tdc_u32(context, result, value, "Failed to read MMCM coarse delay");
 }

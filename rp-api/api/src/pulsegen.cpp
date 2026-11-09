@@ -1,5 +1,6 @@
 #include "pulsegen.h"
 #include "common.h"
+#include "custom_mmio.h"
 #include "rp.h"
 
 #include <atomic>
@@ -22,13 +23,13 @@ void* mapping = nullptr;
 volatile uint32_t* regs = nullptr;
 std::mutex mutex;
 
-uint32_t read(uint32_t offset) { return regs[offset / 4u]; }
+uint32_t read(uint32_t offset) { return custom_mmio_Read(regs + offset / 4u); }
 uint32_t settledRead(uint32_t offset) {
     uint32_t value = 0;
     for (unsigned i = 0; i < 16; ++i) value = read(offset);
     return value;
 }
-void write(uint32_t offset, uint32_t value) { regs[offset / 4u] = value; }
+void write(uint32_t offset, uint32_t value) { custom_mmio_Write(regs + offset / 4u, value); }
 
 int checkMap() {
     if (regs != nullptr) return RP_OK;
@@ -128,9 +129,12 @@ int rp_PulseSetFrequency(double frequency_hz) {
     const std::lock_guard<std::mutex> lock(mutex);
     int result = prepareTimingChange();
     if (result != RP_OK) return result;
-    const double duty = static_cast<double>(settledRead(REG_ACTIVE_HIGH)) /
-                        settledRead(REG_ACTIVE_PERIOD);
-    uint64_t high_ticks = static_cast<uint64_t>(std::llround(cycles * 2u * duty));
+    const uint64_t previous_period = static_cast<uint64_t>(settledRead(REG_ACTIVE_PERIOD)) * 2u;
+    const uint64_t previous_high = static_cast<uint64_t>(settledRead(REG_ACTIVE_HIGH)) * 2u;
+    if (!validTiming(previous_period, previous_high)) return RP_EUF;
+    const uint64_t previous_ticks = previous_period / 2u;
+    // Integer ratio avoids floating-point tie errors when preserving actual duty.
+    uint64_t high_ticks = (cycles * 2u * (previous_high / 2u) + previous_ticks / 2u) / previous_ticks;
     if (high_ticks < 1u) high_ticks = 1u;
     if (high_ticks >= cycles * 2u) high_ticks = cycles * 2u - 1u;
     return apply(period_ns, high_ticks * 2u, false);
@@ -171,6 +175,27 @@ int rp_PulseSetEnabled(bool enable) {
     uint64_t high_ns = static_cast<uint64_t>(settledRead(REG_ACTIVE_HIGH)) * 2u;
     if (!validTiming(period_ns, high_ns)) return RP_EOP;
     return apply(period_ns, high_ns, enable);
+}
+
+int rp_PulseSetDutyCycle(double duty_percent) {
+    if (!std::isfinite(duty_percent) || duty_percent <= 0.0 || duty_percent >= 100.0) return RP_EOOR;
+    const std::lock_guard<std::mutex> lock(mutex);
+    int result = prepareTimingChange();
+    if (result != RP_OK) return result;
+    const uint64_t period = static_cast<uint64_t>(settledRead(REG_ACTIVE_PERIOD)) * 2u;
+    const uint64_t high = static_cast<uint64_t>(std::llround(period * duty_percent / 200.0)) * 2u;
+    if (!validTiming(period, high)) return RP_EOOR;
+    return apply(period, high, false);
+}
+
+int rp_PulseGetDutyCycle(double* duty_percent) {
+    if (!duty_percent) return RP_UIA;
+    uint64_t period = 0, high = 0;
+    int result = rp_PulseGetTiming(&period, &high);
+    if (result != RP_OK) return result;
+    if (!validTiming(period, high)) return RP_EUF;
+    *duty_percent = 100.0 * static_cast<double>(high) / period;
+    return RP_OK;
 }
 
 int rp_PulseGetEnabled(bool* enable) {

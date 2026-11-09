@@ -40,6 +40,9 @@ scpi_result_t RP_InitAll(scpi_t* context) {
 }
 
 scpi_result_t RP_ResetAll(scpi_t* context) {
+    uint32_t version = 0;
+    if (rp_GetCustomFpgaVersion(&version) != RP_OK) return SCPI_RES_ERR;
+    if (version == 19u) return rp_Reset() == RP_OK ? SCPI_RES_OK : SCPI_RES_ERR;
     auto result = RP_AcqReset(context);
     if (result != SCPI_RES_OK) {
         RP_LOG_CRIT("Failed to reset Red Pitaya ACQ modules: %s", rp_GetError(result))

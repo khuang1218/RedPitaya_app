@@ -13,6 +13,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <vector>
 
 #include "acquire.h"
 #include "acquire_axi.h"
@@ -32,6 +33,7 @@
 #include "sweep.h"
 #include "tdc.h"
 #include "pulsegen.h"
+#include "dac_spi.h"
 #include "uart.h"
 
 #include "scpi/error.h"
@@ -53,6 +55,13 @@
 
 scpi_result_t RP_EcosystemVersionQ(scpi_t* context) {
     SCPI_ResultMnemonic(context, rp_GetVersion());
+    return SCPI_RES_OK;
+}
+
+scpi_result_t RP_CustomFpgaVersionQ(scpi_t* context) {
+    uint32_t version = 0;
+    if (rp_GetCustomFpgaVersion(&version) != RP_OK) return SCPI_RES_ERR;
+    SCPI_ResultUInt32(context, version);
     return SCPI_RES_OK;
 }
 
@@ -110,6 +119,8 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("SYSTem:TIME?", RP_TimeQ),
     SCPI_CMD("SYSTem:DATE", RP_Date),
     SCPI_CMD("SYSTem:DATE?", RP_DateQ),
+
+    SCPI_CMD("SYSTem:FPGA:VERSion?", RP_CustomFpgaVersionQ),
 
     /* General commands */
     SCPI_CMD("RP:INit", RP_InitAll),
@@ -312,6 +323,8 @@ static const scpi_command_t scpi_commands[] = {
 
     /* LVDS carry-chain time-to-digital converter */
     // GPIO pulse timing is in integer nanoseconds; frequency is in hertz.
+    SCPI_CMD("PULSe:DCYCle", RP_PulseDuty),
+    SCPI_CMD("PULSe:DCYCle?", RP_PulseDutyQ),
     SCPI_CMD("PULSe:RESet", RP_PulseReset),
     SCPI_CMD("PULSe:TIMing", RP_PulseTiming),
     SCPI_CMD("PULSe:TIMing?", RP_PulseTimingQ),
@@ -326,71 +339,87 @@ static const scpi_command_t scpi_commands[] = {
     SCPI_CMD("PULSe:STATus?", RP_PulseStatusQ),
     SCPI_CMD("PULSe:PIN?", RP_PulsePinQ),
 
-    SCPI_CMD("TDC:RESet", RP_TdcReset),
-    SCPI_CMD("TDC:ENABle", RP_TdcEnable),
-    SCPI_CMD("TDC:ENABle?", RP_TdcEnableQ),
-    SCPI_CMD("TDC:MODE", RP_TdcMode),
-    SCPI_CMD("TDC:MODE?", RP_TdcModeQ),
-    SCPI_CMD("TDC:INPut", RP_TdcInput),
-    SCPI_CMD("TDC:INPut?", RP_TdcInputQ),
-    SCPI_CMD("TDC:WIDTh:DELay", RP_TdcWidthDelay),
-    SCPI_CMD("TDC:WIDTh:DELay?", RP_TdcWidthDelayQ),
-    SCPI_CMD("TDC:WIDTh:LATency?", RP_TdcWidthLatencyQ),
-    SCPI_CMD("TDC:WIDTh:OFFSet", RP_TdcWidthOffset),
-    SCPI_CMD("TDC:WIDTh:OFFSet?", RP_TdcWidthOffsetQ),
-    SCPI_CMD("TDC:WIDTh:ARM", RP_TdcWidthArm),
-    SCPI_CMD("TDC:WIDTh:ABORt", RP_TdcWidthAbort),
-    SCPI_CMD("TDC:WIDTh:CLEar", RP_TdcWidthClear),
-    SCPI_CMD("TDC:WIDTh:STATus?", RP_TdcWidthStatusQ),
-    SCPI_CMD("TDC:WIDTh:COUNt?", RP_TdcWidthCountQ),
-    SCPI_CMD("TDC:WIDTh:CAPacity?", RP_TdcWidthCapacityQ),
-    SCPI_CMD("TDC:WIDTh:TICK?", RP_TdcWidthTickQ),
-    SCPI_CMD("TDC:WIDTh:MINimum:PERiod?", RP_TdcWidthMinimumPeriodQ),
-    SCPI_CMD("TDC:WIDTh:DIAGnostic:CONFig?", RP_TdcWidthDiagnosticConfigQ),
-    SCPI_CMD("TDC:WIDTh:DIAGnostic:EDGE?", RP_TdcWidthDiagnosticEdgeQ),
-    SCPI_CMD("TDC:WIDTh:DATA?", RP_TdcWidthDataQ),
-    SCPI_CMD("TDC:WIDTh:DATA:RAW?", RP_TdcWidthRawDataQ),
-    SCPI_CMD("TDC:WIDTh:VERSion?", RP_TdcWidthVersionQ),
-    SCPI_CMD("TDC:WIDTh:TIMeout", RP_TdcWidthTimeout),
-    SCPI_CMD("TDC:WIDTh:TIMeout?", RP_TdcWidthTimeoutQ),
-    SCPI_CMD("TDC:WIDTh:CALibration:LUT:WRITe", RP_TdcWidthLutWrite),
-    SCPI_CMD("TDC:WIDTh:CALibration:LUT:READ?", RP_TdcWidthLutReadQ),
-    SCPI_CMD("TDC:WIDTh:CALibration:ACTivate", RP_TdcWidthCalibration),
-    SCPI_CMD("TDC:WIDTh:CALibration:ACTivate?", RP_TdcWidthCalibrationQ),
-    SCPI_CMD("TDC:TRIGger", RP_TdcTrigger),
-    SCPI_CMD("TDC:STATus?", RP_TdcStatusQ),
-    SCPI_CMD("TDC:TAPs?", RP_TdcTapsQ),
-    SCPI_CMD("TDC:TEST:INTernal", RP_TdcInternalTest),
-    SCPI_CMD("TDC:TEST:INTernal?", RP_TdcInternalTestQ),
-    SCPI_CMD("TDC:LAUNch:PERiod", RP_TdcLaunchPeriod),
-    SCPI_CMD("TDC:LAUNch:PERiod?", RP_TdcLaunchPeriodQ),
-    SCPI_CMD("TDC:LAUNch:WIDTh", RP_TdcLaunchWidth),
-    SCPI_CMD("TDC:LAUNch:WIDTh?", RP_TdcLaunchWidthQ),
-    SCPI_CMD("TDC:TIMeout", RP_TdcTimeout),
-    SCPI_CMD("TDC:TIMeout?", RP_TdcTimeoutQ),
-    SCPI_CMD("TDC:FIFO:COUNt?", RP_TdcFifoCountQ),
-    SCPI_CMD("TDC:FIFO:DATA?", RP_TdcFifoDataQ),
-    SCPI_CMD("TDC:MEASure?", RP_TdcMeasureQ),
-    SCPI_CMD("TDC:MEASure:RAW?", RP_TdcMeasureRawQ),
-    SCPI_CMD("TDC:CALibration:CLEar", RP_TdcCalibrationClear),
-    SCPI_CMD("TDC:CALibration:STARt", RP_TdcCalibrationStart),
-    SCPI_CMD("TDC:CALibration:STOP", RP_TdcCalibrationStop),
-    SCPI_CMD("TDC:CALibration:STATus?", RP_TdcCalibrationStatusQ),
-    SCPI_CMD("TDC:CALibration:HISTogram?", RP_TdcCalibrationHistogramQ),
-    SCPI_CMD("TDC:CALibration:LUT:WRITe", RP_TdcCalibrationLutWrite),
-    SCPI_CMD("TDC:CALibration:LUT:READ?", RP_TdcCalibrationLutReadQ),
-    SCPI_CMD("TDC:CALibration:LUT:ACTivate", RP_TdcCalibrationLutActivate),
-    SCPI_CMD("TDC:CALibration:LUT:ACTivate?", RP_TdcCalibrationLutActivateQ),
-    SCPI_CMD("TDC:MMCM:ENABle", RP_TdcMmcmEnable),
-    SCPI_CMD("TDC:MMCM:ENABle?", RP_TdcMmcmEnableQ),
-    SCPI_CMD("TDC:MMCM:RESet", RP_TdcMmcmReset),
-    SCPI_CMD("TDC:MMCM:STEP", RP_TdcMmcmStep),
-    SCPI_CMD("TDC:MMCM:STATus?", RP_TdcMmcmStatusQ),
-    SCPI_CMD("TDC:MMCM:TIMeout:CLEar", RP_TdcMmcmTimeoutClear),
-    SCPI_CMD("TDC:MMCM:PHASe:COUNt?", RP_TdcMmcmPhaseCountQ),
-    SCPI_CMD("TDC:MMCM:PHASe:CLEar", RP_TdcMmcmPhaseClear),
-    SCPI_CMD("TDC:MMCM:COARse:DELay", RP_TdcMmcmCoarseDelay),
-    SCPI_CMD("TDC:MMCM:COARse:DELay?", RP_TdcMmcmCoarseDelayQ),
+    SCPI_CMD("TDC#:RESet", RP_TdcReset),
+    SCPI_CMD("TDC#:ENABle", RP_TdcEnable),
+    SCPI_CMD("TDC#:ENABle?", RP_TdcEnableQ),
+    SCPI_CMD("TDC#:MODE", RP_TdcMode),
+    SCPI_CMD("TDC#:MODE?", RP_TdcModeQ),
+    SCPI_CMD("TDC#:INPut", RP_TdcInput),
+    SCPI_CMD("TDC#:INPut?", RP_TdcInputQ),
+    SCPI_CMD("TDC#:WIDTh:DELay", RP_TdcWidthDelay),
+    SCPI_CMD("TDC#:WIDTh:DELay?", RP_TdcWidthDelayQ),
+    SCPI_CMD("TDC#:WIDTh:LATency?", RP_TdcWidthLatencyQ),
+    SCPI_CMD("TDC#:WIDTh:OFFSet", RP_TdcWidthOffset),
+    SCPI_CMD("TDC#:WIDTh:OFFSet?", RP_TdcWidthOffsetQ),
+    SCPI_CMD("TDC#:WIDTh:ARM", RP_TdcWidthArm),
+    SCPI_CMD("TDC#:WIDTh:ABORt", RP_TdcWidthAbort),
+    SCPI_CMD("TDC#:WIDTh:CLEar", RP_TdcWidthClear),
+    SCPI_CMD("TDC#:WIDTh:STATus?", RP_TdcWidthStatusQ),
+    SCPI_CMD("TDC#:WIDTh:COUNt?", RP_TdcWidthCountQ),
+    SCPI_CMD("TDC#:WIDTh:CAPacity?", RP_TdcWidthCapacityQ),
+    SCPI_CMD("TDC#:WIDTh:TICK?", RP_TdcWidthTickQ),
+    SCPI_CMD("TDC#:WIDTh:MINimum:PERiod?", RP_TdcWidthMinimumPeriodQ),
+    SCPI_CMD("TDC#:WIDTh:DIAGnostic:CONFig?", RP_TdcWidthDiagnosticConfigQ),
+    SCPI_CMD("TDC#:WIDTh:DIAGnostic:EDGE?", RP_TdcWidthDiagnosticEdgeQ),
+    SCPI_CMD("TDC#:WIDTh:DATA?", RP_TdcWidthDataQ),
+    SCPI_CMD("TDC#:WIDTh:DATA:RAW?", RP_TdcWidthRawDataQ),
+    SCPI_CMD("TDC#:WIDTh:VERSion?", RP_TdcWidthVersionQ),
+    SCPI_CMD("TDC#:WIDTh:TIMeout", RP_TdcWidthTimeout),
+    SCPI_CMD("TDC#:WIDTh:TIMeout?", RP_TdcWidthTimeoutQ),
+    SCPI_CMD("TDC#:WIDTh:CALibration:LUT:WRITe", RP_TdcWidthLutWrite),
+    SCPI_CMD("TDC#:WIDTh:CALibration:LUT:READ?", RP_TdcWidthLutReadQ),
+    SCPI_CMD("TDC#:WIDTh:CALibration:ACTivate", RP_TdcWidthCalibration),
+    SCPI_CMD("TDC#:WIDTh:CALibration:ACTivate?", RP_TdcWidthCalibrationQ),
+    SCPI_CMD("TDC#:TRIGger", RP_TdcTrigger),
+    SCPI_CMD("TDC#:STATus?", RP_TdcStatusQ),
+    SCPI_CMD("TDC#:TAPs?", RP_TdcTapsQ),
+    SCPI_CMD("TDC#:TEST:INTernal", RP_TdcInternalTest),
+    SCPI_CMD("TDC#:TEST:INTernal?", RP_TdcInternalTestQ),
+    SCPI_CMD("TDC#:LAUNch:PERiod", RP_TdcLaunchPeriod),
+    SCPI_CMD("TDC#:LAUNch:PERiod?", RP_TdcLaunchPeriodQ),
+    SCPI_CMD("TDC#:LAUNch:WIDTh", RP_TdcLaunchWidth),
+    SCPI_CMD("TDC#:LAUNch:WIDTh?", RP_TdcLaunchWidthQ),
+    SCPI_CMD("TDC#:TIMeout", RP_TdcTimeout),
+    SCPI_CMD("TDC#:TIMeout?", RP_TdcTimeoutQ),
+    SCPI_CMD("TDC#:FIFO:COUNt?", RP_TdcFifoCountQ),
+    SCPI_CMD("TDC#:FIFO:DATA?", RP_TdcFifoDataQ),
+    SCPI_CMD("TDC#:MEASure?", RP_TdcMeasureQ),
+    SCPI_CMD("TDC#:MEASure:RAW?", RP_TdcMeasureRawQ),
+    SCPI_CMD("TDC#:CALibration:CLEar", RP_TdcCalibrationClear),
+    SCPI_CMD("TDC#:CALibration:STARt", RP_TdcCalibrationStart),
+    SCPI_CMD("TDC#:CALibration:STOP", RP_TdcCalibrationStop),
+    SCPI_CMD("TDC#:CALibration:STATus?", RP_TdcCalibrationStatusQ),
+    SCPI_CMD("TDC#:CALibration:HISTogram?", RP_TdcCalibrationHistogramQ),
+    SCPI_CMD("TDC#:CALibration:LUT:WRITe", RP_TdcCalibrationLutWrite),
+    SCPI_CMD("TDC#:CALibration:LUT:READ?", RP_TdcCalibrationLutReadQ),
+    SCPI_CMD("TDC#:CALibration:LUT:ACTivate", RP_TdcCalibrationLutActivate),
+    SCPI_CMD("TDC#:CALibration:LUT:ACTivate?", RP_TdcCalibrationLutActivateQ),
+    SCPI_CMD("TDC#:MMCM:ENABle", RP_TdcMmcmEnable),
+    SCPI_CMD("TDC#:MMCM:ENABle?", RP_TdcMmcmEnableQ),
+    SCPI_CMD("TDC#:MMCM:RESet", RP_TdcMmcmReset),
+    SCPI_CMD("TDC#:MMCM:STEP", RP_TdcMmcmStep),
+    SCPI_CMD("TDC#:MMCM:STATus?", RP_TdcMmcmStatusQ),
+    SCPI_CMD("TDC#:MMCM:TIMeout:CLEar", RP_TdcMmcmTimeoutClear),
+    SCPI_CMD("TDC#:MMCM:PHASe:COUNt?", RP_TdcMmcmPhaseCountQ),
+    SCPI_CMD("TDC#:MMCM:PHASe:CLEar", RP_TdcMmcmPhaseClear),
+    SCPI_CMD("TDC#:MMCM:COARse:DELay", RP_TdcMmcmCoarseDelay),
+    SCPI_CMD("TDC#:MMCM:COARse:DELay?", RP_TdcMmcmCoarseDelayQ),
+
+    SCPI_CMD("DAC:SPI:STATus?", RP_DacSpiStatusQ),
+    SCPI_CMD("DAC:SPI:PERiod", RP_DacSpiPeriod),
+    SCPI_CMD("DAC:SPI:PERiod?", RP_DacSpiPeriodQ),
+    SCPI_CMD("DAC:SPI:FREQuency", RP_DacSpiFrequency),
+    SCPI_CMD("DAC:SPI:FREQuency?", RP_DacSpiFrequencyQ),
+    SCPI_CMD("DAC:LDAC:WIDTh", RP_DacSpiLdacWidth),
+    SCPI_CMD("DAC:LDAC:WIDTh?", RP_DacSpiLdacWidthQ),
+    SCPI_CMD("DAC:WEIGhts", RP_DacSpiWeights),
+    SCPI_CMD("DAC:WEIGhts:LOAD", RP_DacSpiLoad),
+    SCPI_CMD("DAC:WEIGhts?", RP_DacSpiWeightsQ),
+    SCPI_CMD("DAC:APPLied?", RP_DacSpiAppliedQ),
+    SCPI_CMD("DAC:LDAC", RP_DacSpiApply),
+    SCPI_CMD("DAC:SPI:RAW:WRITe", RP_DacSpiRawWrite),
+    SCPI_CMD("DAC:SPI:RAW:READ?", RP_DacSpiRawReadQ),
+    SCPI_CMD("DAC:SPI:COUNters?", RP_DacSpiCountersQ),
 
     /* Generate */
     SCPI_CMD("GEN:RST", RP_GenReset),
@@ -615,6 +644,29 @@ static const scpi_command_t scpi_commands[] = {
 
     SCPI_CMD_LIST_END};
 
+// Keep the stock/v18 command table, but never advertise absent v19 engines.
+// Static immutable vectors remain valid for all simultaneous client contexts.
+const scpi_command_t* rp_scpi_CommandsForVersion(uint32_t version) {
+    if (version != 19u) return scpi_commands;
+    static const std::vector<scpi_command_t> commands = [] {
+        std::vector<scpi_command_t> result;
+        for (const auto& command : scpi_commands) {
+            const char* p = command.pattern;
+            if (!p) break;
+            if (!strncmp(p, "ACQ:", 4) || !strncmp(p, "BNET:", 5) ||
+                !strncmp(p, "ANALOG:", 7) || !strncmp(p, "DAISY:", 6) ||
+                !strncmp(p, "LCR:", 4) || strstr(p, ":AXI:") ||
+                !strncmp(p, "RP:DIg", 6) || strstr(p, "TDC#:WIDTh:DELay") ||
+                strstr(p, "TDC#:WIDTh:LATency")) continue;
+            result.push_back(command);
+        }
+        const scpi_command_t end = SCPI_CMD_LIST_END;
+        result.push_back(end);
+        return result;
+    }();
+    return commands.data();
+}
+
 static scpi_interface_t scpi_interface = {
     .error = SCPI_Error,
     .write = SCPI_Write,
@@ -650,7 +702,13 @@ scpi_t* initContext(bool arduinoMode) {
         fprintf(stderr, "Failed allocate buffer for scpi_t\n");
         return NULL;
     };
-    ctx->cmdlist = scpi_commands;
+    uint32_t version = 0;
+    if (rp_GetCustomFpgaVersion(&version) != RP_OK) {
+        delete[] buffer;
+        delete ctx;
+        return nullptr;
+    }
+    ctx->cmdlist = rp_scpi_CommandsForVersion(version);
     ctx->buffer.data = buffer;
     ctx->buffer.length = SCPI_INPUT_BUFFER_LENGTH;
     ctx->interface = arduinoMode ? &scpi_arduino_interface : &scpi_interface;

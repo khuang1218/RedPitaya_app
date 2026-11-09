@@ -1,0 +1,54 @@
+{
+  "schema": "v18-frame-offsets-v1",
+  "bitstream_label": "v18_20261026_140711",
+  "input": "SINGLE",
+  "source_run": "20261026T150410_720673Z",
+  "units": "ns",
+  "offsets_by_period_ns": {
+    "1000": 0,
+    "200": 0,
+    "100": 0,
+    "68": 12,
+    "52": 0,
+    "40": 0
+  },
+  "evidence_by_period_ns": {
+    "1000": [
+      "rate_f1e+06_d30",
+      "rate_f1e+06_d50",
+      "rate_f1e+06_d70"
+    ],
+    "200": [
+      "rate_f5e+06_d30",
+      "rate_f5e+06_d50",
+      "rate_f5e+06_d70"
+    ],
+    "100": [
+      "rate_f1e+07_d30",
+      "rate_f1e+07_d50",
+      "rate_f1e+07_d70"
+    ],
+    "68": [
+      "rate_f1.5e+07_d30",
+      "rate_f1.5e+07_d50",
+      "rate_f1.5e+07_d70"
+    ],
+    "52": [
+      "rate_f2e+07_d30",
+      "rate_f2e+07_d50",
+      "rate_f2e+07_d70"
+    ],
+    "40": [
+      "rate_f2.5e+07_d30",
+      "rate_f2.5e+07_d50",
+      "rate_f2.5e+07_d70"
+    ]
+  },
+  "qualification": "Observed in selected complete bursts; no phase-lock/unconditional-yield qualification. Recheck with the actual PCB.",
+  "unverified_defaults_by_period_ns": {
+    "10000": 0
+  },
+  "unverified_default_note": "100 kHz was not measured in this run. Zero is an initial frame boundary, not a calibrated 100 kHz offset.",
+  "width_bias_offset_ns": null,
+  "width_bias_note": "No qualified universal width-bias correction exists; frame offset changes association, not measured width."
+}

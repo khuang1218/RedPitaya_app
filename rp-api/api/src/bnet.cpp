@@ -3,6 +3,7 @@
  */
 
 #include "bnet.h"
+#include "custom_hw.h"
 #include "axi_manager.h"
 #include "common.h"
 #include "rp.h"
@@ -201,6 +202,7 @@ int bnet_Release() {
 }
 
 int rp_BNetSetChannelData(uint32_t channel, int32_t value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (channel >= BNET_NUM_CH)
         return RP_EOOR;
 
@@ -213,6 +215,7 @@ int rp_BNetSetChannelData(uint32_t channel, int32_t value) {
 }
 
 int rp_BNetGetChannelData(uint32_t channel, int32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (value == NULL)
         return RP_UIA;
     if (channel >= BNET_NUM_CH)
@@ -227,6 +230,7 @@ int rp_BNetGetChannelData(uint32_t channel, int32_t* value) {
 }
 
 int rp_BNetStart() {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
         return ret;
@@ -242,6 +246,7 @@ int rp_BNetStart() {
 }
 
 int rp_BNetCommitAllEnabledStreams() {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
         return ret;
@@ -252,6 +257,7 @@ int rp_BNetCommitAllEnabledStreams() {
 }
 
 int rp_BNetReset() {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
         return ret;
@@ -262,6 +268,7 @@ int rp_BNetReset() {
 }
 
 int rp_BNetGetStatus(uint32_t* status) {
+    if (customhw_IsV19()) return RP_EUF;
     if (status == NULL)
         return RP_UIA;
 
@@ -274,6 +281,7 @@ int rp_BNetGetStatus(uint32_t* status) {
 }
 
 int rp_BNetSetInputMode(uint32_t mode) {
+    if (customhw_IsV19()) return RP_EUF;
     if ((mode & ~BNET_CONFIG_INPUT_MODE_MASK) != 0)
         return RP_EOOR;
 
@@ -289,6 +297,7 @@ int rp_BNetSetInputMode(uint32_t mode) {
 }
 
 int rp_BNetGetInputMode(uint32_t* mode) {
+    if (customhw_IsV19()) return RP_EUF;
     if (mode == NULL)
         return RP_UIA;
 
@@ -301,6 +310,7 @@ int rp_BNetGetInputMode(uint32_t* mode) {
 }
 
 int rp_BNetSetConfig(uint32_t config) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
         return ret;
@@ -310,6 +320,7 @@ int rp_BNetSetConfig(uint32_t config) {
 }
 
 int rp_BNetGetConfig(uint32_t* config) {
+    if (customhw_IsV19()) return RP_EUF;
     if (config == NULL)
         return RP_UIA;
 
@@ -322,54 +333,67 @@ int rp_BNetGetConfig(uint32_t* config) {
 }
 
 int rp_BNetSetStaticWeightReuse(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_SetConfigBit(BNET_CONFIG_STATIC_WEIGHT_REUSE, enable);
 }
 
 int rp_BNetGetStaticWeightReuse(bool* enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_GetConfigBit(BNET_CONFIG_STATIC_WEIGHT_REUSE, enable);
 }
 
 int rp_BNetSetStaticPipeline(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_SetConfigBit(BNET_CONFIG_STATIC_PIPELINE, enable);
 }
 
 int rp_BNetGetStaticPipeline(bool* enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_GetConfigBit(BNET_CONFIG_STATIC_PIPELINE, enable);
 }
 
 int rp_BNetSetSingleDacOutput(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_SetConfigBit(BNET_CONFIG_SINGLE_DAC_OUTPUT, enable);
 }
 
 int rp_BNetGetSingleDacOutput(bool* enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_GetConfigBit(BNET_CONFIG_SINGLE_DAC_OUTPUT, enable);
 }
 
 int rp_BNetSetSplitDacOutput(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_SetConfigBit(BNET_CONFIG_SPLIT_DAC_OUTPUT, enable);
 }
 
 int rp_BNetGetSplitDacOutput(bool* enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_GetConfigBit(BNET_CONFIG_SPLIT_DAC_OUTPUT, enable);
 }
 
 int rp_BNetSetCombineAdcInput(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_SetConfigBit(BNET_CONFIG_COMBINE_ADC_INPUT, enable);
 }
 
 int rp_BNetGetCombineAdcInput(bool* enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_GetConfigBit(BNET_CONFIG_COMBINE_ADC_INPUT, enable);
 }
 
 int rp_BNetSetCombineAdcPhase(bool phase) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_SetConfigBit(BNET_CONFIG_COMBINE_ADC_PHASE, phase);
 }
 
 int rp_BNetGetCombineAdcPhase(bool* phase) {
+    if (customhw_IsV19()) return RP_EUF;
     return bnet_GetConfigBit(BNET_CONFIG_COMBINE_ADC_PHASE, phase);
 }
 
 int rp_BNetSetVectorLength(uint32_t samples) {
+    if (customhw_IsV19()) return RP_EUF;
     if (samples != 1024u && samples != 2048u && samples != 4096u)
         return RP_EOOR;
 
@@ -384,6 +408,7 @@ int rp_BNetSetVectorLength(uint32_t samples) {
 }
 
 int rp_BNetGetVectorLength(uint32_t* samples) {
+    if (customhw_IsV19()) return RP_EUF;
     if (samples == NULL)
         return RP_UIA;
 
@@ -396,6 +421,7 @@ int rp_BNetGetVectorLength(uint32_t* samples) {
 }
 
 int rp_BNetGetStreamCount(uint32_t* count) {
+    if (customhw_IsV19()) return RP_EUF;
     if (count == NULL)
         return RP_UIA;
 
@@ -408,6 +434,7 @@ int rp_BNetGetStreamCount(uint32_t* count) {
 }
 
 int rp_BNetGetActiveMask(uint32_t* mask) {
+    if (customhw_IsV19()) return RP_EUF;
     if (mask == NULL)
         return RP_UIA;
 
@@ -420,6 +447,7 @@ int rp_BNetGetActiveMask(uint32_t* mask) {
 }
 
 int rp_BNetGetPendingMask(uint32_t* mask) {
+    if (customhw_IsV19()) return RP_EUF;
     if (mask == NULL)
         return RP_UIA;
 
@@ -432,6 +460,7 @@ int rp_BNetGetPendingMask(uint32_t* mask) {
 }
 
 int rp_BNetGetErrorMask(uint32_t* mask) {
+    if (customhw_IsV19()) return RP_EUF;
     if (mask == NULL)
         return RP_UIA;
 
@@ -444,6 +473,7 @@ int rp_BNetGetErrorMask(uint32_t* mask) {
 }
 
 int rp_BNetGetOutputData(uint32_t index, int32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (value == NULL)
         return RP_UIA;
     if (index >= BNET_NUM_OUT)
@@ -458,6 +488,7 @@ int rp_BNetGetOutputData(uint32_t index, int32_t* value) {
 }
 
 int rp_BNetSetWeightBank(uint32_t bank) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
         return ret;
@@ -480,6 +511,7 @@ int rp_BNetSetWeightBank(uint32_t bank) {
 }
 
 int rp_BNetGetWeightBank(uint32_t* bank) {
+    if (customhw_IsV19()) return RP_EUF;
     if (bank == NULL)
         return RP_UIA;
 
@@ -492,6 +524,7 @@ int rp_BNetGetWeightBank(uint32_t* bank) {
 }
 
 int rp_BNetGetWeightBankCount(uint32_t* count) {
+    if (customhw_IsV19()) return RP_EUF;
     if (count == NULL)
         return RP_UIA;
 
@@ -508,6 +541,7 @@ int rp_BNetGetWeightBankCount(uint32_t* count) {
 }
 
 int rp_BNetGetTiming(uint32_t index, uint32_t* cycles) {
+    if (customhw_IsV19()) return RP_EUF;
     if (cycles == NULL)
         return RP_UIA;
     if (index > 5u)
@@ -530,6 +564,7 @@ int rp_BNetGetTiming(uint32_t index, uint32_t* cycles) {
 }
 
 int rp_BNetGetCaptureCount(uint32_t* count) {
+    if (customhw_IsV19()) return RP_EUF;
     if (count == NULL)
         return RP_UIA;
 
@@ -542,6 +577,7 @@ int rp_BNetGetCaptureCount(uint32_t* count) {
 }
 
 int rp_BNetGetCaptureStatus(uint32_t* status) {
+    if (customhw_IsV19()) return RP_EUF;
     if (status == NULL)
         return RP_UIA;
 
@@ -554,6 +590,7 @@ int rp_BNetGetCaptureStatus(uint32_t* status) {
 }
 
 int rp_BNetGetCaptureData(uint32_t index, int32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (value == NULL)
         return RP_UIA;
 
@@ -570,6 +607,7 @@ int rp_BNetGetCaptureData(uint32_t index, int32_t* value) {
 }
 
 int rp_BNetGetCaptureDataBlock(uint32_t start, uint32_t samples, int16_t* values) {
+    if (customhw_IsV19()) return RP_EUF;
     if (samples > 0 && values == NULL)
         return RP_UIA;
 
@@ -589,6 +627,7 @@ int rp_BNetGetCaptureDataBlock(uint32_t start, uint32_t samples, int16_t* values
 }
 
 int rp_BNetSetStreamBase(uint32_t stream, uint32_t buffer, uint32_t address) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)
         return ret;
@@ -606,6 +645,7 @@ int rp_BNetSetStreamBase(uint32_t stream, uint32_t buffer, uint32_t address) {
 }
 
 int rp_BNetGetStreamBase(uint32_t stream, uint32_t buffer, uint32_t* address) {
+    if (customhw_IsV19()) return RP_EUF;
     if (address == NULL)
         return RP_UIA;
 
@@ -625,6 +665,7 @@ int rp_BNetGetStreamBase(uint32_t stream, uint32_t buffer, uint32_t* address) {
 }
 
 int rp_BNetSetStreamLength(uint32_t stream, uint32_t bytes) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)
         return ret;
@@ -638,6 +679,7 @@ int rp_BNetSetStreamLength(uint32_t stream, uint32_t bytes) {
 }
 
 int rp_BNetGetStreamLength(uint32_t stream, uint32_t* bytes) {
+    if (customhw_IsV19()) return RP_EUF;
     if (bytes == NULL)
         return RP_UIA;
 
@@ -654,6 +696,7 @@ int rp_BNetGetStreamLength(uint32_t stream, uint32_t* bytes) {
 }
 
 int rp_BNetSetStreamStride(uint32_t stream, uint32_t bytes) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)
         return ret;
@@ -667,6 +710,7 @@ int rp_BNetSetStreamStride(uint32_t stream, uint32_t bytes) {
 }
 
 int rp_BNetGetStreamStride(uint32_t stream, uint32_t* bytes) {
+    if (customhw_IsV19()) return RP_EUF;
     if (bytes == NULL)
         return RP_UIA;
 
@@ -683,6 +727,7 @@ int rp_BNetGetStreamStride(uint32_t stream, uint32_t* bytes) {
 }
 
 int rp_BNetSetStreamFormat(uint32_t stream, uint32_t format) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)
         return ret;
@@ -696,6 +741,7 @@ int rp_BNetSetStreamFormat(uint32_t stream, uint32_t format) {
 }
 
 int rp_BNetGetStreamFormat(uint32_t stream, uint32_t* format) {
+    if (customhw_IsV19()) return RP_EUF;
     if (format == NULL)
         return RP_UIA;
 
@@ -712,6 +758,7 @@ int rp_BNetGetStreamFormat(uint32_t stream, uint32_t* format) {
 }
 
 int rp_BNetEnableStream(uint32_t stream, bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)
         return ret;
@@ -726,6 +773,7 @@ int rp_BNetEnableStream(uint32_t stream, bool enable) {
 }
 
 int rp_BNetGetStreamEnable(uint32_t stream, bool* enable) {
+    if (customhw_IsV19()) return RP_EUF;
     if (enable == NULL)
         return RP_UIA;
 
@@ -742,6 +790,7 @@ int rp_BNetGetStreamEnable(uint32_t stream, bool* enable) {
 }
 
 int rp_BNetCommitStreamBuffer(uint32_t stream, uint32_t buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)
         return ret;
@@ -760,6 +809,7 @@ int rp_BNetCommitStreamBuffer(uint32_t stream, uint32_t buffer) {
 }
 
 int rp_BNetForceStreamSwap(uint32_t stream) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)
         return ret;
@@ -774,6 +824,7 @@ int rp_BNetForceStreamSwap(uint32_t stream) {
 }
 
 int rp_BNetClearStreamError(uint32_t stream) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckStream(stream);
     if (ret != RP_OK)
         return ret;
@@ -788,6 +839,7 @@ int rp_BNetClearStreamError(uint32_t stream) {
 }
 
 int rp_BNetGetStreamStatus(uint32_t stream, uint32_t* status) {
+    if (customhw_IsV19()) return RP_EUF;
     if (status == NULL)
         return RP_UIA;
 
@@ -804,6 +856,7 @@ int rp_BNetGetStreamStatus(uint32_t stream, uint32_t* status) {
 }
 
 int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr) {
+    if (customhw_IsV19()) return RP_EUF;
     if (read_ptr == NULL)
         return RP_UIA;
 
@@ -820,6 +873,7 @@ int rp_BNetGetStreamReadPtr(uint32_t stream, uint32_t* read_ptr) {
 }
 
 int rp_BNetGetStreamDebug(uint32_t stream, uint32_t index, uint32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (value == NULL)
         return RP_UIA;
     if (index > 1u)
@@ -840,6 +894,7 @@ int rp_BNetGetStreamDebug(uint32_t stream, uint32_t index, uint32_t* value) {
 }
 
 int rp_BNetDdrGetMemoryRegion(uint32_t* start, uint32_t* size) {
+    if (customhw_IsV19()) return RP_EUF;
     if ((start == NULL) || (size == NULL))
         return RP_UIA;
 
@@ -847,6 +902,7 @@ int rp_BNetDdrGetMemoryRegion(uint32_t* start, uint32_t* size) {
 }
 
 int rp_BNetDdrReserve(uint32_t slot, uint32_t address, uint32_t size) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckDdrSlot(slot);
     if (ret != RP_OK)
         return ret;
@@ -878,6 +934,7 @@ int rp_BNetDdrReserve(uint32_t slot, uint32_t address, uint32_t size) {
 }
 
 int rp_BNetDdrRelease(uint32_t slot) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckDdrSlot(slot);
     if (ret != RP_OK)
         return ret;
@@ -892,6 +949,7 @@ int rp_BNetDdrRelease(uint32_t slot) {
 }
 
 int rp_BNetDdrGetSlotBase(uint32_t slot, uint32_t* address) {
+    if (customhw_IsV19()) return RP_EUF;
     if (address == NULL)
         return RP_UIA;
 
@@ -904,6 +962,7 @@ int rp_BNetDdrGetSlotBase(uint32_t slot, uint32_t* address) {
 }
 
 int rp_BNetDdrGetSlotSize(uint32_t slot, uint32_t* size) {
+    if (customhw_IsV19()) return RP_EUF;
     if (size == NULL)
         return RP_UIA;
 
@@ -916,6 +975,7 @@ int rp_BNetDdrGetSlotSize(uint32_t slot, uint32_t* size) {
 }
 
 int rp_BNetDdrAttachStreamBuffer(uint32_t slot, uint32_t stream, uint32_t buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckDdrSlotReserved(slot);
     if (ret != RP_OK)
         return ret;
@@ -928,6 +988,7 @@ int rp_BNetDdrAttachStreamBuffer(uint32_t slot, uint32_t stream, uint32_t buffer
 }
 
 int rp_BNetDdrWriteRaw(uint32_t slot, uint32_t offset_bytes, const uint8_t* data, uint32_t bytes) {
+    if (customhw_IsV19()) return RP_EUF;
     if (data == NULL)
         return RP_UIA;
 
@@ -954,6 +1015,7 @@ int rp_BNetDdrWriteRaw(uint32_t slot, uint32_t offset_bytes, const uint8_t* data
 }
 
 int rp_BNetDdrWriteI16(uint32_t slot, uint32_t offset_samples, const int16_t* data, uint32_t samples) {
+    if (customhw_IsV19()) return RP_EUF;
     if ((offset_samples > UINT32_MAX / sizeof(int16_t)) ||
         (samples > UINT32_MAX / sizeof(int16_t))) {
         return RP_EOOR;
@@ -964,6 +1026,7 @@ int rp_BNetDdrWriteI16(uint32_t slot, uint32_t offset_samples, const int16_t* da
 }
 
 int rp_BNetDdrWriteU16(uint32_t slot, uint32_t offset_samples, const uint16_t* data, uint32_t samples) {
+    if (customhw_IsV19()) return RP_EUF;
     if ((offset_samples > UINT32_MAX / sizeof(uint16_t)) ||
         (samples > UINT32_MAX / sizeof(uint16_t))) {
         return RP_EOOR;
@@ -974,6 +1037,7 @@ int rp_BNetDdrWriteU16(uint32_t slot, uint32_t offset_samples, const uint16_t* d
 }
 
 int rp_BNetSetLed6Heartbeat(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     int ret = bnet_CheckMap();
     if (ret != RP_OK)
         return ret;
@@ -990,6 +1054,7 @@ int rp_BNetSetLed6Heartbeat(bool enable) {
 }
 
 int rp_BNetGetLed6Heartbeat(bool* enable) {
+    if (customhw_IsV19()) return RP_EUF;
     if (enable == NULL)
         return RP_UIA;
 

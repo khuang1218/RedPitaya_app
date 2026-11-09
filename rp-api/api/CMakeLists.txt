@@ -72,6 +72,8 @@ list(APPEND src
             ${CMAKE_SOURCE_DIR}/src/bnet.cpp
             ${CMAKE_SOURCE_DIR}/src/tdc.cpp
             ${CMAKE_SOURCE_DIR}/src/pulsegen.cpp
+            ${CMAKE_SOURCE_DIR}/src/custom_hw.cpp
+            ${CMAKE_SOURCE_DIR}/src/dac_spi.cpp
             ${CMAKE_SOURCE_DIR}/src/oscilloscope.cpp
             ${CMAKE_SOURCE_DIR}/src/acq_handler.cpp
             ${CMAKE_SOURCE_DIR}/src/rp.cpp

@@ -8,6 +8,7 @@ including rejected frames, are retained for alignment and delay investigation.
 import csv
 import json
 import math
+import random
 import socket
 import time
 import warnings
@@ -115,7 +116,7 @@ def plan_matched_period(frequency_hz, minimum_period_ns=500, frame_period_ns=Non
                 note="Both instruments receive the same nominal period. Relative phase, clock drift and launch-to-return delay are not established by equal settings.")
 
 
-def verify_dc_readback(function, application_reply, level_v, arbitrary_type=None):
+def verify_dc_readback(function, application_reply, level_v, arbitrary_type=None, expected_level_v=0.):
     """Verify DC using specific waveform identity, allowing a generic ARB reply.
 
     Offset 0 V alone cannot establish that an arbitrary waveform is constant.
@@ -135,14 +136,16 @@ def verify_dc_readback(function, application_reply, level_v, arbitrary_type=None
         if len(application_fields) != 5:
             raise RuntimeError("Malformed Rigol APPLy? DC response: " + application_reply)
         application_offset = float(application_fields[3])
-    zero_offsets = (math.isfinite(level_v) and abs(level_v) <= 0.01
+    if not math.isfinite(expected_level_v) or not 0 <= expected_level_v <= 3.3:
+        raise ValueError("DC reference must be within 0..3.3 V")
+    matching_offsets = (math.isfinite(level_v) and abs(level_v-expected_level_v) <= 0.01
                     and (application_offset is None or
-                         (math.isfinite(application_offset) and abs(application_offset) <= 0.01)))
-    if not specific_dc or not zero_offsets:
-        raise RuntimeError("Rigol DC LOW was not verified: "
+                         (math.isfinite(application_offset) and abs(application_offset-expected_level_v) <= 0.01)))
+    if not specific_dc or not matching_offsets:
+        raise RuntimeError(f"Rigol DC {expected_level_v:g} V was not verified: "
                            f"FUNC?={function!r}, APPL?={application_reply!r}, "
                            f"FUNC:ARB?={arb_type!r}, offset={level_v!r} V. "
-                           "Output remains OFF; an arbitrary waveform at zero offset is not sufficient.")
+                           "Output remains OFF; an arbitrary waveform offset is not sufficient.")
     return dict(function_readback=function, application_reply=application_reply,
                 application_type=application_type, arbitrary_type=arb_type,
                 application_offset_v=application_offset, dc_level_v=level_v,
@@ -364,9 +367,16 @@ class Rigol:
 
     def dc_low(self):
         """Drive a defined 0 V for a negative control instead of floating OFF."""
+        return self.dc_level(0.)
+
+    def dc_level(self, level_v):
+        """Select and verify a constant 0..3.3 V while the output is OFF."""
+        level_v = float(level_v)
+        if not math.isfinite(level_v) or not 0 <= level_v <= 3.3:
+            raise ValueError("DC level must be within 0..3.3 V")
         self.off()
         # APPLy:DC requires placeholders for the unused frequency/amplitude/phase.
-        self.write(self.source + ":APPLy:DC DEFault,DEFault,0,DEFault")
+        self.write(self.source + f":APPLy:DC DEFault,DEFault,{level_v:.12g},DEFault")
         self.off()
         # Firmware 00.01.00 reports DC as generic ARB. The redundant FUNCtion DC
         # selector was followed by -350 Queue overflow on this instrument.
@@ -383,9 +393,10 @@ class Rigol:
         info = dict(identity=self.identity, channel=self.channel, function=function,
                     application_reply=application, arbitrary_type=arbitrary_type,
                     dc_level_v=level, dc_verified=False,
-                    reference="Defined LOW, no expected pulses")
+                    reference=f"Defined {level_v:g} V DC, no expected pulses")
         self.last_settings = info
-        info.update(verify_dc_readback(function, application, level, arbitrary_type))
+        info.update(verify_dc_readback(function, application, level, arbitrary_type,
+                                       expected_level_v=level_v))
         return info
 
     def close(self):
@@ -539,6 +550,9 @@ def edge_timestamp_diagnostics(records, samples, stride, period_ns, tick_ps=4000
 class Bench:
     def __init__(self, config, directory):
         self.config = dict(config)
+        self.config.setdefault("capture_retention", "complete_only")
+        if self.config.get("capture_retention", "complete_only") not in ("complete_only", "nonzero", "all"):
+            raise ValueError("capture_retention must be complete_only, nonzero or all")
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.image = None
@@ -585,9 +599,10 @@ class Bench:
                 minimum = int(rp.ask("TDC:WIDTH:MINIMUM:PERIOD?"))
                 stride, capacity = map(int, rp.ask("TDC:WIDTH:DIAGNOSTIC:CONFIG?").split(","))
             except Exception as exc:
-                raise RuntimeError("V16 needs the updated API and SCPI server (MINIMUM:PERIOD and DIAGNOSTIC commands): " + str(exc)) from exc
-            if minimum < 200 or minimum % 4 or stride != 64 or capacity != (info["capacity"]+stride-1)//stride:
-                raise RuntimeError("Invalid V16 minimum period or diagnostic configuration")
+                raise RuntimeError("V16+ needs the updated API and SCPI server (MINIMUM:PERIOD and DIAGNOSTIC commands): " + str(exc)) from exc
+            minimum_floor = 40 if info["width_version"] >= 17 else 200
+            if minimum < minimum_floor or minimum % 4 or stride != 64 or capacity != (info["capacity"]+stride-1)//stride:
+                raise RuntimeError("Invalid hardware minimum period or diagnostic configuration")
             info.update(minimum_period_ns=minimum, diagnostic_stride=stride,
                         diagnostic_capacity=capacity)
         if rp.ask("PULSE:PIN?") != "DIO1_P":
@@ -604,10 +619,15 @@ class Bench:
             rp.write("TDC:WIDTH:ABORT")
             rp.idle(5)
             self.image = self._image(rp)
+            input_before_setup = rp.ask("TDC:INPUT?").upper()
             for cmd in ("TDC:ENABLE OFF", "TDC:TEST:INTERNAL OFF", "TDC:MMCM:ENABLE OFF",
                         "TDC:INPUT SINGLE", "TDC:WIDTH:CALIBRATION:ACTIVATE OFF"):
                 rp.write(cmd)
-            result = dict(image=self.image, awg_identity=awg.identity,
+            selected_input = rp.ask("TDC:INPUT?").upper()
+            if selected_input != "SINGLE":
+                raise RuntimeError("Preflight could not confirm SINGLE input selection")
+            result = dict(image=self.image, input_before_setup=input_before_setup,
+                          selected_input=selected_input, awg_identity=awg.identity,
                           original_awg_settings=awg.ask(awg.source + ":APPLy?"),
                           original_clock_source=awg.ask(":SYSTem:ROSCillator:SOURce?"))
             save_json(self.directory / "preflight.json", result)
@@ -702,9 +722,11 @@ class Bench:
                     frames=s["total_frames"], flag_counts=s["flag_counts"]))
                 ledger["complete_fraction_all_attempts"] = (
                     ledger["total_complete_pulses"]/max(1, ledger["total_frames"]))
+                no_edges = bool(capture["records"]) and all((r[1] & 6) == 6 for r in capture["records"])
                 print(f"  {s['complete_pulses']}/{capture['frames_requested']} complete; "
                       + ("accepted" if accepted else "saved; " +
-                         ("restarting sources" if number < limit else "attempt limit reached")), flush=True)
+                         ("no edges; stopping retries" if no_edges else
+                          "restarting sources" if number < limit else "attempt limit reached")), flush=True)
                 if accepted:
                     ledger["accepted_attempt"] = number
                     ledger["finished_utc"] = utc_now()
@@ -715,6 +737,14 @@ class Bench:
                     save_json(ledger_path, ledger)
                     return capture
                 save_json(ledger_path, ledger)
+                # Uniform missing edges are a different failure from pulses cut
+                # by a frame boundary. Keep the capture/ledger, then diagnose
+                # the input instead of repeating 50 identical source starts.
+                if no_edges:
+                    raise RuntimeError("No rising or falling edges in any frame. "
+                        "Run input_path_diagnostic before retrying alignment; check "
+                        "the selected Rigol channel to DIO2_P (E1 pin 7), common ground, and the "
+                        "SINGLE sampler path. All records saved: " + str(ledger_path))
             except BaseException as exc:
                 ledger["failure"] = f"{type(exc).__name__}: {exc}"
                 ledger["failed_attempt"] = number
@@ -728,14 +758,14 @@ class Bench:
         save_json(ledger_path, ledger)
         raise RuntimeError(f"{label}: no {capture['frames_requested']}/{capture['frames_requested']} "
                            f"complete burst after {limit} source starts. All attempts saved: {ledger_path}. "
-                           "Increase PHASE_RETRY_MAX_ATTEMPTS or investigate alignment/drift; periods were unchanged.")
+                           "Inspect flags and input_path_diagnostic before changing retries; periods were unchanged.")
 
     def _acquire_once(self, label, frequency_hz, width_ns, frames=None, fine=False,
                       reference_ns=None, window_ns=None, stimulus="pulse", retry_context=None):
         if self.image is None:
             raise RuntimeError("Run preflight after loading the bitstream")
-        if stimulus not in ("pulse", "dc_low") or (stimulus == "dc_low" and fine):
-            raise ValueError("Stimulus must be pulse or an uncalibrated dc_low control")
+        if stimulus not in ("pulse", "dc_low", "dc_high") or (stimulus != "pulse" and fine):
+            raise ValueError("Stimulus must be pulse or an uncalibrated DC control")
         count = self.config["frame_count"] if frames is None else frames
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= self.image["capacity"]:
             raise ValueError("Frames must be an integer within hardware capacity")
@@ -811,11 +841,11 @@ class Bench:
             if any(not math.isfinite(v) or not 0 <= v <= 10 for v in settling.values()):
                 raise ValueError("AWG and launch settling times must be finite, between 0 and 10 seconds")
             capture["settling"] = settling
-            if stimulus == "dc_low":
+            if stimulus in ("dc_low", "dc_high"):
                 capture["awg_pulse_setup_before_dc"] = settings
-                capture["awg"] = awg.dc_low()
+                capture["awg"] = awg.dc_level(0. if stimulus == "dc_low" else 3.3)
                 capture["reference_ns"] = None
-                capture["reference_source"] = "DC LOW negative control; no pulse reference"
+                capture["reference_source"] = "DC control; no pulse reference"
                 capture["expected_complete_fraction"] = 0.0
                 capture["target_complete_fraction"] = 0.0
             rp = self._rp()
@@ -827,7 +857,11 @@ class Bench:
             if fine and (self.candidate is None or not self.candidate["ready"]):
                 raise RuntimeError("Upload a qualified candidate before requesting fine capture")
             if fine and rp.ask("TDC:INPUT?").upper() != "SINGLE":
-                raise RuntimeError("Input changed since LUT upload; recalibrate")
+                raise RuntimeError("Input changed since LUT upload. An FPGA reload resets input and "
+                    "calibration state; bench.stop() only stops outputs/capture. If the exact same "
+                    "bitstream and measurement setup were restored, run bench.preflight() then "
+                    "bench.upload(candidate) to restore the saved qualified LUTs. Collect fresh "
+                    "calibration for a changed build or input path; VERSION alone is not build identity.")
             for command in ("TDC:ENABLE OFF", "TDC:TEST:INTERNAL OFF", "TDC:MMCM:ENABLE OFF",
                             "TDC:INPUT SINGLE", "TDC:WIDTH:CALIBRATION:ACTIVATE " + ("ON" if fine else "OFF"),
                             f"PULSE:TIMING {window},{window//2}"):
@@ -850,6 +884,17 @@ class Bench:
             awg.on()
             awg_on_time = time.monotonic()
             time.sleep(settling["awg_s"])
+            if stimulus in ("dc_low", "dc_high"):
+                # GPIO readback is meaningful for settled DC, not a frequency
+                # measurement. Explicitly select input direction as well as
+                # the image's hardwired tri-state on this reserved input.
+                rp.write("DIG:PIN:DIR IN,DIO2_P")
+                levels = [int(rp.ask("DIG:PIN? DIO2_P")) for _ in range(8)]
+                if any(level not in (0, 1) for level in levels):
+                    raise RuntimeError("Invalid DIO2_P digital readback")
+                capture["input_gpio"] = dict(pin="DIO2_P", samples=levels,
+                    expected_level=int(stimulus == "dc_high"),
+                    matched=all(level == int(stimulus == "dc_high") for level in levels))
             rp.write("PULSE:OUTPUT ON")
             launch_on_time = time.monotonic()
             time.sleep(settling["launch_s"])
@@ -950,6 +995,35 @@ class Bench:
             self.save_capture(stem, capture)
 
     def save_capture(self, stem, capture):
+        policy = self.config.get("capture_retention", "complete_only")
+        if policy not in ("complete_only", "nonzero", "all"):
+            raise ValueError("capture_retention must be complete_only, nonzero or all")
+        records = capture["records"]
+        complete = sum(bool(r[1] & 1) for r in records)
+        full = (capture.get("acquisition_ok", False) and not capture.get("cleanup_errors")
+                and "failure" not in capture and bool(records)
+                and complete == capture.get("frames_requested", len(records)) == len(records))
+        keep_raw = policy == "all" or (policy == "nonzero" and complete > 0) or full
+        capture["raw_records_saved"] = keep_raw
+        capture["retention"] = dict(policy=policy, raw_omitted=not keep_raw,
+            records_acquired=len(records), complete_pulses=complete,
+            reason="Full raw capture retained" if keep_raw else "Unsuccessful capture: compact metadata only")
+        capture.setdefault("capture_files", {})["json"] = str(stem.with_suffix(".json"))
+        capture["capture_files"]["csv"] = str(stem.with_suffix(".csv")) if keep_raw else None
+        if not keep_raw:
+            # Keep yield/error evidence while omitting record-scale arrays and
+            # repetitive instrument traffic. In-memory records remain available
+            # to diagnostics/retry logic; no accepted-burst statistics change.
+            heavy = {"records", "latency_ticks", "edge_tick_samples", "edge_diagnostics", "awg_scpi_log"}
+            metadata = {k:v for k,v in capture.items() if k not in heavy}
+            metadata["instrument_errors"] = [entry for entry in capture.get("awg_scpi_log", [])
+                if "ERR" in entry.get("command", "").upper() and "reply" in entry
+                and not entry["reply"].startswith("0,")]
+            diagnostics = capture.get("edge_diagnostics", {})
+            metadata["edge_diagnostic_counts"] = {k:diagnostics[k] for k in
+                ("sampled", "valid_pairs", "valid_coarse_pairs", "fine_ineligible_pairs") if k in diagnostics}
+            save_json(stem.with_suffix(".json"), metadata)
+            return
         with stem.with_suffix(".csv").open("w", newline="", encoding="utf-8") as output:
             writer = csv.writer(output)
             writer.writerow((*FIELDS, "decoded_flags", "rise_status_hex", "fall_status_hex",
@@ -1065,6 +1139,246 @@ def quality_guard(capture, minimum=100):
         raise RuntimeError("Mean width disagrees with source; inspect wiring and scope before calibrating")
 
 
+def gpio_pulse_diagnostic(bench, samples=128):
+    """Observe DIO2_P independently of WIDTH with launch OFF, then ON.
+
+    Slow jittered software reads are presence/duty clues, not waveform or
+    frequency measurements. No frame capture, calibration or acceptance gate.
+    """
+    if bench.image is None:
+        raise RuntimeError("Run preflight before the GPIO pulse diagnostic")
+    if isinstance(samples, bool) or not isinstance(samples, int) or not 32 <= samples <= 1024:
+        raise ValueError("GPIO sample count must be an integer in 32..1024")
+    path = bench.directory / "gpio_pulse_diagnostic.json"
+    result = dict(started_utc=utc_now(), points=[], cleanup_errors=[],
+                  frequency_hz=1e6, fpga_period_ns=1000, fpga_high_ns=500,
+                  input_pin="DIO2_P", internal_width_capture=False,
+                  note="Slow jittered GPIO snapshots: high fractions are diagnostic clues only; polling can alias, misses transitions and cannot measure frequency, pulse width or edge sharpness. Compare width response with launch OFF/ON and confirm at the pin with a scope if ambiguous.")
+    awg, rp = None, None
+    try:
+        rp = bench._rp()
+        rp.write("PULSE:OUTPUT OFF")
+        rp.write("TDC:WIDTH:ABORT")
+        rp.idle(5)
+        if bench._image(rp) != bench.image:
+            raise RuntimeError("Image changed since preflight")
+        for command in ("TDC:ENABLE OFF", "TDC:TEST:INTERNAL OFF", "TDC:MMCM:ENABLE OFF",
+                        "TDC:INPUT SINGLE", "DIG:PIN:DIR IN,DIO2_P", "PULSE:TIMING 1000,500"):
+            rp.write(command)
+        if tuple(map(int, rp.ask("PULSE:TIMING?").split(","))) != (1000, 500):
+            raise RuntimeError("GPIO diagnostic launch timing readback mismatch")
+        awg = Rigol(bench.config)
+        rng = random.Random(17001)
+        result["jitter_seed"] = 17001
+        for width in (20.2, 100.2, 500.2, 800.2):
+            rp.write("PULSE:OUTPUT OFF")
+            settings = awg.configure(1e6, width, bench.config)
+            awg.on()
+            time.sleep(0.05)
+            active = awg.readback()
+            validate_pulse_timing(active, 1e6, width)
+            duty = float(awg.ask(awg.source + ":FUNCtion:PULSe:DCYCle?"))
+            if not math.isfinite(duty) or not 0 <= duty <= 100:
+                raise RuntimeError("Invalid active AWG duty-cycle readback")
+            active["duty_query_percent"] = duty
+            active["width_duty_consistent"] = abs(active["duty_query_percent"]/100. -
+                active["width_ns"]/active["period_ns"]) <= 0.0005
+            for launch in (False, True):
+                rp.write("PULSE:OUTPUT " + ("ON" if launch else "OFF"))
+                if rp.ask("PULSE:OUTPUT?").upper() not in (("1", "ON") if launch else ("0", "OFF")):
+                    raise RuntimeError("GPIO diagnostic launch state was not confirmed")
+                time.sleep(0.05)
+                point = dict(requested_width_ns=width, awg=settings, active_awg=active,
+                             launch_enabled=launch, samples=[], host_elapsed_s=[],
+                             sampling_delays_s=[], nominal_high_fraction=settings["width_ns"]/settings["period_ns"])
+                result["points"].append(point)
+                start = time.monotonic()
+                for _ in range(samples):
+                    delay = rng.uniform(0., 0.003)
+                    point["sampling_delays_s"].append(delay)
+                    time.sleep(delay)
+                    level = int(rp.ask("DIG:PIN? DIO2_P"))
+                    if level not in (0, 1):
+                        raise RuntimeError("Invalid DIO2_P digital readback")
+                    point["samples"].append(level)
+                    point["host_elapsed_s"].append(time.monotonic()-start)
+                levels = point["samples"]
+                point.update(high_fraction=sum(levels)/len(levels),
+                             changes_between_snapshots=sum(a != b for a,b in zip(levels, levels[1:])))
+                save_json(path, result)
+                print(f"GPIO only: AWG HIGH {width:g} ns/1000 ns; launch "
+                      f"{'ON' if launch else 'OFF'}; {sum(levels)}/{len(levels)} HIGH snapshots; "
+                      f"nominal duty {point['nominal_high_fraction']:.1%}", flush=True)
+            rp.write("PULSE:OUTPUT OFF")
+            awg.off()
+        return result
+    except BaseException as exc:
+        result["failure"] = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        result["awg_scpi_log"] = awg.log if awg is not None else []
+        result["cleanup_errors"] = bench._cleanup(rp, awg)
+        result["finished_utc"] = utc_now()
+        save_json(path, result)
+        if result["cleanup_errors"] and "failure" not in result:
+            raise RuntimeError("GPIO diagnostic output cleanup failed: " + str(result["cleanup_errors"]))
+
+
+def input_path_diagnostic(bench, frames=512):
+    """Retain DC pin/sampler checks and one coarse burst per rate, without retries.
+
+    Does not qualify precision, fine interpolation, timing closure or full yield.
+    Each acquisition retains normal status/integrity/cleanup checks and stops
+    both outputs. All AWG/FPGA periods remain matched.
+    """
+    if bench.image is None or bench.image["minimum_period_ns"] > 40:
+        raise RuntimeError("Run V17/40 ns preflight before the 25 MHz diagnostic")
+    captures, points = [], []
+    for label, stimulus in (("input_dc_low_before", "dc_low"),
+                            ("input_dc_high", "dc_high"),
+                            ("input_dc_low_after", "dc_low")):
+        c = bench._acquire_once(label, 1e6, 500., frames=frames, stimulus=stimulus)
+        if not c["acquisition_ok"] or c["cleanup_errors"]:
+            raise RuntimeError("Input diagnostic failed acquisition/cleanup; inspect " + str(c["capture_files"]))
+        captures.append(c)
+        print(label, "GPIO:", c["input_gpio"], "flags:", c["summary"]["flag_counts"], flush=True)
+    # Equal 20.2 ns pulses at 1/25 MHz distinguish pulse width from repetition
+    # rate; wide slow pulses check the previously working operating region.
+    for index, (frequency, width) in enumerate(((1e6, 500.2), (1e6, 20.2),
+            (5e6, 100.2), (10e6, 50.2), (15e6, 32.2), (20e6, 24.2), (25e6, 20.2))):
+        c = bench._acquire_once(f"input_rate_{index:02d}_{frequency:g}_w{width:g}",
+                                frequency, width, frames=frames, fine=False)
+        if not c["acquisition_ok"] or c["cleanup_errors"]:
+            raise RuntimeError("Input diagnostic failed acquisition/cleanup; inspect " + str(c["capture_files"]))
+        captures.append(c)
+        flags = c["summary"]["flag_counts"]
+        point = dict(frequency_hz=c["timing"]["common_frequency_hz"],
+                     period_ns=c["timing"]["common_period_ns"], width_ns=c["awg"]["width_ns"],
+                     complete=c["summary"]["complete_pulses"], frames=frames,
+                     frames_with_rise=frames-flags.get("NO_RISE", 0),
+                     frames_with_fall=frames-flags.get("NO_FALL", 0),
+                     flag_counts=flags, capture_files=c["capture_files"])
+        points.append(point)
+        print("Input rate diagnostic:", point, flush=True)
+    dc = captures[:3]
+    gpio_pass = all(c["input_gpio"]["matched"] for c in dc)
+    dc_pass = all(c["summary"]["complete_pulses"] == 0 for c in dc)
+    high_seen = dc[1]["summary"]["flag_counts"].get("HIGH_START", 0) == frames
+    low_seen = all(not c["summary"]["flag_counts"].get("HIGH_START", 0) for c in (dc[0], dc[2]))
+    rate_edges = [p["frames_with_rise"] > 0 and p["frames_with_fall"] > 0 for p in points]
+    ready = gpio_pass and dc_pass and high_seen and low_seen and all(rate_edges)
+    if not gpio_pass:
+        diagnosis = "DIO2_P does not follow settled AWG LOW/HIGH/LOW. Check selected AWG channel, cable, common ground, E1 pin 7 and direct-input wiring before alignment."
+    elif not (dc_pass and high_seen and low_seen):
+        diagnosis = "GPIO follows DC but WIDTH does not follow the same states. Investigate SINGLE input mux, carry sampler/reset, loaded image and failed timing."
+    elif not all(rate_edges):
+        missing = [f"{p['frequency_hz']/1e6:.6g} MHz/{p['width_ns']:g} ns: "
+                   f"RISE {p['frames_with_rise']}/{frames}, FALL {p['frames_with_fall']}/{frames}"
+                   for p, seen in zip(points, rate_edges) if not seen]
+        diagnosis = ("DC GPIO and WIDTH states pass, but pulse edges are missing at "
+                     + "; ".join(missing) + ". Run gpio_pulse_diagnostic with launch OFF/ON "
+                     "to check width response independently of WIDTH. Preserve HIGH_START/EXTRA_EDGES; "
+                     "invalid timestamps are diagnostic only, not measured widths.")
+    else:
+        diagnosis = "Input edges are observed at every tested setting. Continue the alignment survey; partial-frame flags can now be investigated separately."
+    result = dict(ready_for_alignment=ready, gpio_dc_pass=gpio_pass,
+                  width_dc_pass=dc_pass and high_seen and low_seen,
+                  diagnosis=diagnosis, points=points,
+                  dc_capture_files=[c["capture_files"] for c in dc],
+                  policy="one_attempt_per_setting_no_calibration_no_yield_selection",
+                  note="GPIO samples check settled DC only. Successful edge detection does not establish timing closure, precision or complete-burst yield.")
+    save_json(bench.directory / "input_path_diagnostic.json", result)
+    return result, captures
+
+
+def frame_offset_survey(bench, points=None, frames=512, repeats=2):
+    """Scan all legal 4 ns offsets, retaining every uncalibrated attempt.
+
+    Each capture restarts the independent sources: this is not a controlled
+    phase scan. Suggestions use completeness only and require fresh validation.
+    """
+    if bench.image is None or bench.image["width_version"] < 14:
+        raise RuntimeError("Run preflight on an image supporting frame offsets")
+    if isinstance(repeats, bool) or not isinstance(repeats, int) or not 1 <= repeats <= 10:
+        raise ValueError("Offset sweep repeats must be an integer in 1..10")
+    if isinstance(frames, bool) or not isinstance(frames, int) or not 1 <= frames <= bench.image["capacity"]:
+        raise ValueError("Offset sweep frames must fit hardware capacity")
+    points = [(15e6,32.2), (20e6,24.2), (25e6,20.2)] if points is None else list(points)
+    if not points:
+        raise ValueError("Offset sweep needs at least one rate/width point")
+    plans = []
+    for frequency, width in points:
+        plan = plan_matched_period(frequency, bench.image["minimum_period_ns"])
+        period = plan["common_period_ns"]
+        width = float(width)
+        if not math.isfinite(width) or min(width, period-width) < 4.2:
+            raise ValueError("Offset sweep HIGH and LOW must each be at least 4.2 ns")
+        plans.append((float(frequency), width, plan))
+    path = bench.directory / f"frame_offset_survey_{bench.sequence+1:04d}.json"
+    result = dict(started_utc=utc_now(), ledger_path=str(path), attempts=[], offset_summary=[],
+                  suggested_offsets_by_period_ns={}, repeats=repeats, frames_per_attempt=frames,
+                  planned_captures=sum(p["common_period_ns"]//4 for _,_,p in plans)*repeats,
+                  selection="Every repeat complete; no selection by width error, SD or fine validity",
+                  note="Independent sources restart for every attempt. Offset effects are confounded with startup phase/drift. Suggested offsets are candidates, not phase-lock or performance qualification; validate fresh bursts before calibration.")
+    had_offsets = "frame_offsets_by_period_ns" in bench.config
+    original_offsets = bench.config.get("frame_offsets_by_period_ns")
+    try:
+        for repeat in range(repeats):
+            for point_index, (frequency, width, plan) in enumerate(plans):
+                period = plan["common_period_ns"]
+                for offset in range(0, period, 4):
+                    bench.config["frame_offsets_by_period_ns"] = {period: offset}
+                    label = f"offset_scan_p{point_index:02d}_r{repeat:02d}_o{offset:03d}"
+                    c = bench._acquire_once(label, frequency, width, frames=frames, fine=False)
+                    s = c["summary"]
+                    attempt = dict(point=point_index, repeat=repeat, period_ns=period,
+                        frequency_hz=plan["common_frequency_hz"], requested_width_ns=width,
+                        offset_ns=offset, complete=s["complete_pulses"], frames=s["total_frames"],
+                        flag_counts=s["flag_counts"], acquisition_ok=c["acquisition_ok"],
+                        cleanup_errors=c["cleanup_errors"], capture_files=c["capture_files"])
+                    result["attempts"].append(attempt)
+                    save_json(path, result)
+                    print(f"Offset scan {len(result['attempts'])}/{result['planned_captures']}: "
+                          f"{plan['common_frequency_hz']/1e6:.6g} MHz, offset {offset} ns: "
+                          f"{s['complete_pulses']}/{frames}; {s['flag_counts']}", flush=True)
+                    if not c["acquisition_ok"] or c["cleanup_errors"]:
+                        raise RuntimeError("Offset sweep acquisition/cleanup failed; inspect " + str(path))
+        for point_index, (_, width, plan) in enumerate(plans):
+            period = plan["common_period_ns"]
+            candidates = []
+            for offset in range(0, period, 4):
+                attempts = [a for a in result["attempts"] if a["point"] == point_index and a["offset_ns"] == offset]
+                full = sum(a["complete"] == frames for a in attempts)
+                result["offset_summary"].append(dict(point=point_index,
+                    frequency_hz=plan["common_frequency_hz"], period_ns=period,
+                    width_ns=width, offset_ns=offset, complete_starts=full, starts=len(attempts),
+                    complete_fraction_all_frames=sum(a["complete"] for a in attempts)/(frames*len(attempts))))
+                if len(attempts) == repeats and full == repeats:
+                    candidates.append(offset)
+            if candidates:
+                # For repeated points sharing a period, require a common offset.
+                prior = [s for s in result["offset_summary"] if s["period_ns"] == period]
+                passing = [o for o in candidates if all(s["complete_starts"] == repeats
+                           for s in prior if s["offset_ns"] == o)]
+                if passing:
+                    result["suggested_offsets_by_period_ns"][str(period)] = passing[0]
+                else:
+                    result["suggested_offsets_by_period_ns"].pop(str(period), None)
+            else:
+                result["suggested_offsets_by_period_ns"].pop(str(period), None)
+        return result
+    except BaseException as exc:
+        result["failure"] = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        if had_offsets:
+            bench.config["frame_offsets_by_period_ns"] = original_offsets
+        else:
+            bench.config.pop("frame_offsets_by_period_ns", None)
+        result["finished_utc"] = utc_now()
+        save_json(path, result)
+
+
 def alignment_survey(bench, frequency_hz, width_ns, repeats=4, frames=1024):
     """Same-rate screening across software restarts, not a controlled phase scan.
 
@@ -1101,10 +1415,13 @@ def alignment_survey(bench, frequency_hz, width_ns, repeats=4, frames=1024):
     return result, captures
 
 
-def signal_identity_check(bench, frequency_hz=997003., frames=4096):
+def signal_identity_check(bench, frequency_hz=997003., frames=4096, widths_ns=None):
     """Change AWG width at one common AWG/FPGA period; retain alignment failures."""
     captures, points, errors = [], [], []
-    common_period = plan_matched_period(frequency_hz)["common_period_ns"]
+    common_period = plan_matched_period(frequency_hz, bench.image["minimum_period_ns"])["common_period_ns"]
+    widths = (100.2, 300.2, 700.2) if widths_ns is None else tuple(map(float, widths_ns))
+    if len(set(widths)) < 3 or any(not math.isfinite(w) or not 0 < w < common_period for w in widths):
+        raise ValueError("Signal identity requires at least three distinct HIGH widths inside the common period")
     control = bench.acquire("identity_dc_low", frequency_hz, common_period/2, frames=frames,
                             stimulus="dc_low")
     captures.append(control)
@@ -1113,7 +1430,7 @@ def signal_identity_check(bench, frequency_hz=997003., frames=4096):
         errors.append(f"DC LOW produced {dc_count} complete pulses or cleanup was not confirmed")
     print(f"DC 0 V: {dc_count}/{frames} complete pulses (expected zero)")
     # Continue the diagnostic even if the control fails, retaining all evidence.
-    for width in (100.2, 300.2, 700.2):
+    for width in widths:
         capture = bench.acquire(f"identity_width_{width:g}", frequency_hz, width, frames=frames)
         captures.append(capture)
         summary = capture["summary"]

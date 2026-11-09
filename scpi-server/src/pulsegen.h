@@ -1,6 +1,8 @@
 #ifndef RP_PULSEGEN_SCPI_H
 #define RP_PULSEGEN_SCPI_H
 #include "scpi/types.h"
+scpi_result_t RP_PulseDuty(scpi_t* context);
+scpi_result_t RP_PulseDutyQ(scpi_t* context);
 scpi_result_t RP_PulseReset(scpi_t* context);
 scpi_result_t RP_PulseTiming(scpi_t* context);
 scpi_result_t RP_PulseTimingQ(scpi_t* context);

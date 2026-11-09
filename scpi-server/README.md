@@ -1,5 +1,7 @@
 # SCPI SERVER
 
+For the custom dual-TDC v19 image, see [API/SCPI commands, build and tests](V19_SOFTWARE.md).
+
 ## Contents
 
 | paths                         | contents

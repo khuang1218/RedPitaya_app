@@ -15,6 +15,7 @@
 #include "common.h"
 #include "convert.hpp"
 #include "generate.h"
+#include "custom_hw.h"
 #include "math.h"
 #include "rp-i2c-max7311-c.h"
 
@@ -111,7 +112,7 @@ int gen_SetDefaultValues() {
 
     for (int ch_i = 0; ch_i < channels; ch_i++) {
         rp_channel_t ch = convertChFromIndex(ch_i);
-        gen_axi_SetEnable(ch, false);
+        if (!customhw_IsV19()) gen_axi_SetEnable(ch, false);
         gen_Disable(ch);
         gen_setFrequency(ch, 1000);
         gen_setRiseFallMin(ch, 0.1);

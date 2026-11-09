@@ -22,6 +22,8 @@ def load_captures(directory):
         if not path.name[0].isdigit() or path.name.endswith("_retries.json"):
             continue
         c = json.loads(path.read_text())
+        if c.get("raw_records_saved") is False:
+            continue  # Deliberately compacted failures still count in retry ledgers.
         raw = path.with_suffix(".csv")
         if not raw.exists() or "frames_requested" not in c:
             continue

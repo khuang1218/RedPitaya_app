@@ -578,6 +578,7 @@ int rp_GetExternalTriggerLevel(float* value);
  * Timing/frequency changes require output OFF and return RP_EOP while ON.
  * Enable claims the reported GPIO; OFF holds it LOW. Reset releases it back
  * to normal GPIO control and restores 1 ms period / 500 us HIGH defaults.
+ * On v19 the application pins remain permanently reserved by the FPGA.
  * Stop/reset may truncate the last pulse. Ethernet is not an edge-time source.
  * The 250 MHz maximum is a digital timing capability, not an electrical guarantee.
  */
@@ -587,6 +588,9 @@ int rp_GetExternalTriggerLevel(float* value);
 #define RP_PULSE_STATUS_CLAIMED (1u << 2)
 #define RP_PULSE_STATUS_ERROR   (1u << 3)
 #define RP_PULSE_STATUS_READY   (1u << 4)
+/** Custom TDC image version detected at initialization; 0 for other images.
+ * Release/reinitialize the API after replacing the FPGA image. */
+int rp_GetCustomFpgaVersion(uint32_t* version);
 int rp_PulseSetTiming(uint64_t period_ns, uint64_t high_ns);
 int rp_PulseGetTiming(uint64_t* period_ns, uint64_t* high_ns);
 /** Set an exact period in 4 ns steps, preserving duty ratio rounded to 2 ns. */
@@ -596,6 +600,10 @@ int rp_PulseSetPeriod(uint64_t period_ns);
 int rp_PulseSetFrequency(double frequency_hz);
 int rp_PulseGetFrequency(double* frequency_hz);
 int rp_PulseSetHighTime(uint64_t high_ns);
+/** Duty in percent, strictly between 0 and 100. HIGH is rounded to 2 ns;
+ * query timing/duty for actual values. Timing changes require output OFF. */
+int rp_PulseSetDutyCycle(double duty_percent);
+int rp_PulseGetDutyCycle(double* duty_percent);
 int rp_PulseSetEnabled(bool enable);
 int rp_PulseGetEnabled(bool* enable);
 int rp_PulseGetStatus(uint32_t* status);
@@ -615,8 +623,8 @@ typedef enum {
 
 /** External return input. Internal/MMCM test sources take precedence. */
 typedef enum {
-    RP_TDC_INPUT_LVDS = 0,   /**< E3 DIO18_P/N, contacts 31/33. */
-    RP_TDC_INPUT_SINGLE = 1  /**< E1 DIO2_P, contact 7, 3.3 V digital. */
+    RP_TDC_INPUT_LVDS = 0,   /**< E3 DIO18_P/N on core 1; v19 core 2: DIO16_P/N. */
+    RP_TDC_INPUT_SINGLE = 1  /**< E1 DIO2_P (pin7) on core 1; core 2: DIO3_P (pin9). */
 } rp_tdc_input_t;
 
 /** Per-result status flags returned in rp_tdc_result_t::status. */
@@ -670,13 +678,15 @@ int rp_TdcGetMode(rp_tdc_mode_t* mode);
 /** Set requires disabled and idle (RP_EIPV otherwise).
  * Both functions require FPGA TDC v4+ (RP_EUF on earlier images).
  * A changed source resets results/FIFO/histogram and disables LUT correction.
- * The selection survives rp_TdcReset(); full FPGA reset restores LVDS.
+ * The selection survives rp_TdcReset(); full FPGA reset restores the image's
+ * default (SINGLE on v19, LVDS on the original image).
  * DIO2_P is reserved input-only in the custom image, regardless of selection. */
 int rp_TdcSetInput(rp_tdc_input_t input);
 int rp_TdcGetInput(rp_tdc_input_t* input);
 
-/** PCB pulse-width bursts (TDC v5+ / PWB v1; v6+ capacity 16384). Initial trigger limit
- * 1 MHz, 50% drive; 250 MHz sampler. HIGH and LOW >=8 ns for reliable coarse
+/** PCB pulse-width bursts (TDC v5+ / PWB v1; v6+ capacity 16384). Trigger
+ * rate is checked against the hardware minimum period (v19: 40 ns).
+ * Independent HIGH/LOW, each >=8 ns, are required for reliable coarse
  * capture. Start pulse_gen before ARM. Reads follow burst completion; a burst
  * of N uses N+1 trigger edges. ARM sets the stopped-trigger timeout from the
  * pulse period; an output stopped mid-burst is reported, not silently ignored.
@@ -827,6 +837,115 @@ int rp_TdcCalibrationComputeLut(const uint32_t* histogram, uint32_t bins,
                                 uint32_t clock_period_ps, uint16_t* lut_out);
 
 ///@}
+
+/** Explicit TDC channel variants. RP_CH_1 / RP_CH_2 select physical cores.
+ * The original functions above always address channel 1. Channel 2 requires
+ * v19. No process-global channel selector is used. LUTs, offsets, indexed
+ * records and legacy/MMCM state belong to the selected core independently.
+ */
+int rp_TdcResetCh(rp_channel_t channel);
+int rp_TdcEnableCh(rp_channel_t channel, bool enable);
+int rp_TdcGetEnableCh(rp_channel_t channel, bool* enable);
+int rp_TdcSetModeCh(rp_channel_t channel, rp_tdc_mode_t mode);
+int rp_TdcGetModeCh(rp_channel_t channel, rp_tdc_mode_t* mode);
+int rp_TdcSetInputCh(rp_channel_t channel, rp_tdc_input_t input);
+int rp_TdcGetInputCh(rp_channel_t channel, rp_tdc_input_t* input);
+int rp_TdcWidthGetStatusCh(rp_channel_t channel, uint32_t* v);
+int rp_TdcWidthGetCountCh(rp_channel_t channel, uint32_t* v);
+int rp_TdcWidthGetCapacityCh(rp_channel_t channel, uint32_t* v);
+int rp_TdcWidthGetTickCh(rp_channel_t channel, uint32_t* v);
+int rp_TdcWidthGetMinimumPeriodCh(rp_channel_t channel, uint32_t* v);
+int rp_TdcWidthGetTimeoutCh(rp_channel_t channel, uint32_t* v);
+int rp_TdcWidthGetDiagnosticsCh(rp_channel_t channel, uint32_t* stride, uint32_t* capacity);
+int rp_TdcWidthReadEdgeTicksCh(rp_channel_t channel, uint32_t start, rp_tdc_width_edge_ticks_t* values, uint32_t count);
+int rp_TdcWidthSetDelayCh(rp_channel_t channel, uint32_t minimum_ns, uint32_t maximum_ns);
+int rp_TdcWidthGetDelayCh(rp_channel_t channel, uint32_t* minimum_ns, uint32_t* maximum_ns);
+int rp_TdcWidthReadLatencyCh(rp_channel_t channel, uint32_t start, uint32_t* ticks, uint32_t count);
+int rp_TdcWidthSetFrameOffsetCh(rp_channel_t channel, uint32_t nanoseconds);
+int rp_TdcWidthGetFrameOffsetCh(rp_channel_t channel, uint32_t* nanoseconds);
+int rp_TdcWidthArmCh(rp_channel_t channel, uint32_t count);
+int rp_TdcWidthAbortCh(rp_channel_t channel);
+int rp_TdcWidthClearCh(rp_channel_t channel);
+int rp_TdcWidthSetTimeoutCh(rp_channel_t channel, uint32_t cycles);
+int rp_TdcWidthGetVersionCh(rp_channel_t channel, uint32_t* version);
+int rp_TdcWidthReadCh(rp_channel_t channel, uint32_t start, rp_tdc_width_result_t* values, uint32_t count);
+int rp_TdcWidthReadRawCh(rp_channel_t channel, uint32_t start, rp_tdc_width_result_t* values, uint32_t count);
+int rp_TdcWidthWriteLutCh(rp_channel_t channel, bool fall, uint32_t start, const uint16_t* v, uint32_t count);
+int rp_TdcWidthReadLutCh(rp_channel_t channel, bool fall, uint32_t start, uint16_t* v, uint32_t count);
+int rp_TdcWidthActivateCalibrationCh(rp_channel_t channel, bool enable);
+int rp_TdcWidthGetCalibrationCh(rp_channel_t channel, bool* enable);
+int rp_TdcSetLaunchPeriodCh(rp_channel_t channel, uint32_t cycles);
+int rp_TdcGetLaunchPeriodCh(rp_channel_t channel, uint32_t* cycles);
+int rp_TdcSetLaunchWidthCh(rp_channel_t channel, uint32_t cycles);
+int rp_TdcGetLaunchWidthCh(rp_channel_t channel, uint32_t* cycles);
+int rp_TdcSetTimeoutCh(rp_channel_t channel, uint32_t cycles);
+int rp_TdcGetTimeoutCh(rp_channel_t channel, uint32_t* cycles);
+int rp_TdcTriggerCh(rp_channel_t channel);
+int rp_TdcGetStatusCh(rp_channel_t channel, uint32_t* status);
+int rp_TdcGetFifoLevelCh(rp_channel_t channel, uint32_t* level);
+int rp_TdcGetNumTapsCh(rp_channel_t channel, uint32_t* taps);
+int rp_TdcSetInternalTestCh(rp_channel_t channel, bool enable);
+int rp_TdcGetInternalTestCh(rp_channel_t channel, bool* enable);
+int rp_TdcMmcmSetSweepEnableCh(rp_channel_t channel, bool enable);
+int rp_TdcMmcmGetSweepEnableCh(rp_channel_t channel, bool* enable);
+int rp_TdcMmcmResetCh(rp_channel_t channel);
+int rp_TdcMmcmSetCoarseDelayCh(rp_channel_t channel, uint16_t cycles);
+int rp_TdcMmcmGetCoarseDelayCh(rp_channel_t channel, uint16_t* cycles);
+int rp_TdcMmcmGetStatusCh(rp_channel_t channel, uint32_t* status);
+int rp_TdcMmcmClearTimeoutCh(rp_channel_t channel);
+int rp_TdcMmcmGetPhaseCountCh(rp_channel_t channel, int32_t* count);
+int rp_TdcMmcmClearPhaseCountCh(rp_channel_t channel);
+int rp_TdcMmcmPhaseStepCh(rp_channel_t channel, bool increase);
+int rp_TdcReadResultCh(rp_channel_t channel, rp_tdc_result_t* result);
+int rp_TdcGetLastResultCh(rp_channel_t channel, rp_tdc_result_t* result);
+int rp_TdcGetRawCaptureCh(rp_channel_t channel, uint32_t start_word, uint32_t* words, uint32_t count);
+int rp_TdcCalibrationClearHistogramCh(rp_channel_t channel);
+int rp_TdcCalibrationStartCh(rp_channel_t channel, uint32_t target_events);
+int rp_TdcCalibrationStopCh(rp_channel_t channel);
+int rp_TdcCalibrationGetStatusCh(rp_channel_t channel, uint32_t* status, uint32_t* events_collected);
+int rp_TdcCalibrationReadHistogramCh(rp_channel_t channel, uint32_t start_bin, uint32_t* counts, uint32_t count);
+int rp_TdcCalibrationWriteLutCh(rp_channel_t channel, uint32_t start_bin, const uint16_t* time_ps, uint32_t count);
+int rp_TdcCalibrationReadLutCh(rp_channel_t channel, uint32_t start_bin, uint16_t* time_ps, uint32_t count);
+int rp_TdcCalibrationActivateCh(rp_channel_t channel, bool enable);
+int rp_TdcCalibrationGetActiveCh(rp_channel_t channel, bool* enable);
+int rp_TdcCalibrationComputeLutCh(rp_channel_t channel, const uint32_t* histogram, uint32_t bins,
+                                uint32_t clock_period_ps, uint16_t* lut_out);
+
+/** @name V19 FPGA DAC80516 SPI controller (separate from Linux SPI)
+ * All codes are unsigned 16-bit values for OUT0..OUT3, in that order.
+ * Calls serialize complete transactions and wait up to 100 ms. A timeout does
+ * not cancel or retry a physical transaction. Do not concurrently use /dev/mem
+ * or another process to control this block. No DAC setup writes occur at init.
+ * Software status/applied codes describe the FPGA engine, not DAC voltage or
+ * external-device acknowledgement. Configure the DAC using its board-specific
+ * register settings before applying weights; no voltage range is assumed.
+ */
+#define RP_DAC_SPI_BUSY    (1u << 0)
+#define RP_DAC_SPI_READY   (1u << 2)
+#define RP_DAC_SPI_LOADED  (1u << 3)
+#define RP_DAC_SPI_APPLIED (1u << 4)
+#define RP_DAC_SPI_DONE    (1u << 5)
+int rp_DacSpiGetStatus(uint32_t* status);
+/** Period and LDAC width use 8 ns controller ticks. Period: 4..250;
+ * LDAC width: 13..250. Default period 12; default LDAC width 16. */
+int rp_DacSpiSetPeriod(uint32_t ticks);
+int rp_DacSpiGetPeriod(uint32_t* ticks);
+int rp_DacSpiSetFrequency(double frequency_hz);
+int rp_DacSpiGetFrequency(double* frequency_hz);
+int rp_DacSpiSetLdacWidth(uint32_t ticks);
+int rp_DacSpiGetLdacWidth(uint32_t* ticks);
+/** Snapshot four codes, transmit all four; apply=true also pulses LDAC.
+ * apply=false loads the DAC input registers for a later rp_DacSpiApply(). */
+int rp_DacSpiSetWeights(const uint16_t* codes, bool apply);
+/** applied=false: FPGA shadow; true: last LDAC group, RP_EIPV if unknown. */
+int rp_DacSpiGetWeights(uint16_t* codes, bool applied);
+int rp_DacSpiApply(void);
+/** Raw 24-bit frame; write bit23 must be 0, read bit23 must be 1.
+ * Raw writes invalidate tracked loaded/applied groups. Reads send a second NOP,
+ * temporarily slow the SPI period to >=16 ticks, then restore it on success. */
+int rp_DacSpiWriteRaw(uint32_t frame);
+int rp_DacSpiReadRaw(uint32_t frame, uint32_t* response);
+int rp_DacSpiGetCounters(uint32_t* frames, uint32_t* applies);
 
 /** @name Custom Butterfly Network Register Block
  */

@@ -116,7 +116,9 @@ int main() {
     hw[TDC_NUM_TAPS_OFFSET/4]=512;
     assert(rp_TdcWidthArm(0)==RP_EOOR && rp_TdcWidthArm(1025)==RP_EOOR);
     test_period=8;test_high=4;assert(rp_TdcWidthArm(1)==RP_EOOR);
-    test_period=1000;test_high=400;assert(rp_TdcWidthArm(1)==RP_EOOR);
+    test_period=1000;test_high=400;assert(rp_TdcWidthArm(1)==RP_OK);
+    test_high=6;assert(rp_TdcWidthArm(1)==RP_EOOR);
+    test_high=994;assert(rp_TdcWidthArm(1)==RP_EOOR);
     test_high=500;
     test_pulse_enabled=false;assert(rp_TdcWidthArm(1)==RP_EIPV);test_pulse_enabled=true;
     hw[TDC_CONTROL_OFFSET/4]=TDC_CTRL_INTERNAL_TEST;
@@ -201,6 +203,17 @@ int main() {
     hw[TDC_WIDTH_RECORD/4]=1;assert(rp_TdcWidthReadEdgeTicks(1,&edge,1)==RP_EUF);
     hw[TDC_WIDTH_READ_READY/4]=0;assert(rp_TdcWidthReadEdgeTicks(0,&edge,1)==RP_EUF);
     hw[TDC_WIDTH_STATUS/4]=RP_TDC_WIDTH_BUSY;assert(rp_TdcWidthReadEdgeTicks(0,&edge,1)==RP_EIPV);
+    // V17 reuses the V16 commands and six-field ABI, with a 40 ns minimum.
+    hw[TDC_ID_VERSION_OFFSET/4]=0x54444311;
+    hw[TDC_WIDTH_STATUS/4]=RP_TDC_WIDTH_DONE;
+    hw[TDC_WIDTH_MIN_PERIOD/4]=40;
+    test_period=40;test_high=20;
+    assert(rp_TdcWidthArm(16384)==RP_OK && hw[TDC_WIDTH_TIMEOUT/4]==52);
+    send("TDC:WIDTH:MINIMUM:PERIOD?\n");assert(response=="40\r\n");
+    assert(rp_TdcWidthGetDiagnostics(&stride,&capacity)==RP_OK && stride==64 && capacity==256);
+    uint32_t version17=0;
+    assert(rp_TdcWidthGetVersion(&version17)==RP_OK && version17==17);
+    test_period=36;test_high=18;assert(rp_TdcWidthArm(1)==RP_EOOR);
     tdc_Release();
-    puts("PASS: TDC input/width API and actual SCPI parser; legacy compatibility, V16 200 ns minimum, sparse diagnostics, busy/rate/duty/range/ready/sequence guards");
+    puts("PASS: TDC input/width API and actual SCPI parser; legacy/V16/V17 compatibility, 40 ns ARM/minimum/diagnostics and busy/rate/duty/range/ready/sequence guards");
 }

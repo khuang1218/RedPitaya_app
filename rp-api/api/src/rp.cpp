@@ -26,6 +26,8 @@
 #include "oscilloscope.h"
 #include "tdc.h"
 #include "pulsegen.h"
+#include "custom_hw.h"
+#include "dac_spi.h"
 #include "rp_hw_calib.h"
 
 #include "rp-i2c-max7311-c.h"
@@ -62,20 +64,30 @@ int rp_InitAdresses() {
         return ret;
     }
 
-    ret = ams_Init();
+    ret = customhw_Init();
     if (ret != RP_OK) {
-        ERROR_LOG("Error init ams regset. Code:  %d", ret)
         pthread_mutex_unlock(&rp_init_mutex);
         rp_Release();
         return ret;
     }
 
-    ret = daisy_Init();
-    if (ret != RP_OK) {
-        ERROR_LOG("Error init daisy regset. Code:  %d", ret)
-        pthread_mutex_unlock(&rp_init_mutex);
-        rp_Release();
-        return ret;
+    if (!customhw_IsV19()) {
+        ret = ams_Init();
+        if (ret != RP_OK) {
+            ERROR_LOG("Error init ams regset. Code:  %d", ret)
+            pthread_mutex_unlock(&rp_init_mutex);
+            rp_Release();
+            return ret;
+        }
+
+        ret = daisy_Init();
+        if (ret != RP_OK) {
+            ERROR_LOG("Error init daisy regset. Code:  %d", ret)
+            pthread_mutex_unlock(&rp_init_mutex);
+            rp_Release();
+            return ret;
+        }
+
     }
 
     if (rp_HPIsFastDAC_PresentOrDefault()) {
@@ -88,20 +100,23 @@ int rp_InitAdresses() {
         }
     }
 
-    ret = osc_Init(rp_HPGetFastADCChannelsCountOrDefault());
-    if (ret != RP_OK) {
-        ERROR_LOG("Error init osc regset. Code:  %d", ret)
-        pthread_mutex_unlock(&rp_init_mutex);
-        rp_Release();
-        return ret;
-    }
+    if (!customhw_IsV19()) {
+        ret = osc_Init(rp_HPGetFastADCChannelsCountOrDefault());
+        if (ret != RP_OK) {
+            ERROR_LOG("Error init osc regset. Code:  %d", ret)
+            pthread_mutex_unlock(&rp_init_mutex);
+            rp_Release();
+            return ret;
+        }
 
-    ret = bnet_Init();
-    if (ret != RP_OK) {
-        ERROR_LOG("Error init BNET regset. Code:  %d", ret)
-        pthread_mutex_unlock(&rp_init_mutex);
-        rp_Release();
-        return ret;
+        ret = bnet_Init();
+        if (ret != RP_OK) {
+            ERROR_LOG("Error init BNET regset. Code:  %d", ret)
+            pthread_mutex_unlock(&rp_init_mutex);
+            rp_Release();
+            return ret;
+        }
+
     }
 
     g_api_state = true;
@@ -155,10 +170,12 @@ int rp_Release() {
     ECHECK_NO_RET(bnet_Release())
     ECHECK_NO_RET(tdc_Release())
     ECHECK_NO_RET(pulsegen_Release())
+    ECHECK_NO_RET(dacspi_Release())
     ECHECK_NO_RET(ams_Release())
     ECHECK_NO_RET(hk_Release())
     ECHECK_NO_RET(daisy_Release())
     ECHECK_NO_RET(cmn_Release())
+    customhw_Release();
     g_api_state = false;
     pthread_mutex_unlock(&rp_init_mutex);
     return RP_OK;
@@ -167,13 +184,20 @@ int rp_Release() {
 int rp_Reset() {
     rp_DpinReset();  // No need check ret value
     ECHECK(hk_Reset())
-    ECHECK(rp_AOpinReset())
+    if (!customhw_IsV19()) { ECHECK(rp_AOpinReset()) }
 
     if (rp_HPIsFastDAC_PresentOrDefault()) {
         ECHECK(rp_GenReset())
     }
 
-    ECHECK(rp_AcqReset())
+    if (customhw_IsV19()) {
+        ECHECK(rp_PulseReset())
+        for (auto channel : {RP_CH_1, RP_CH_2}) {
+            ECHECK(rp_TdcWidthAbortCh(channel))
+            ECHECK(rp_TdcEnableCh(channel, false))
+            ECHECK(rp_TdcResetCh(channel))
+        }
+    } else { ECHECK(rp_AcqReset()) }
     return RP_OK;
 }
 
@@ -250,6 +274,7 @@ int rp_PrintHouseRegset() {
 }
 
 int rp_PrintOscRegset() {
+    if (customhw_IsV19()) return RP_EUF;
     return osc_printRegset();
 }
 
@@ -258,10 +283,12 @@ int rp_PrintAsgRegset() {
 }
 
 int rp_PrintAmsRegset() {
+    if (customhw_IsV19()) return RP_EUF;
     return ams_printRegset();
 }
 
 int rp_PrintDaisyRegset() {
+    if (customhw_IsV19()) return RP_EUF;
     return daisy_printRegset();
 }
 
@@ -658,6 +685,12 @@ int rp_GPIOpGetState(uint32_t* state) {
  * Digital Pin Input Output methods
  */
 
+
+static bool v19_ReservedPin(rp_dpin_t pin) {
+    return customhw_IsV19() && (pin == RP_LED7 || pin == RP_DIO4_N ||
+           (pin >= RP_DIO1_P && pin <= RP_DIO7_P));
+}
+
 int rp_DpinReset() {
     hk_version_t ver = house_getHKVersion();
     switch (ver) {
@@ -708,6 +741,7 @@ int rp_DpinReset() {
 }
 
 int rp_DpinSetDirection(rp_dpin_t _pin, rp_pinDirection_t direction) {
+    if (v19_ReservedPin(_pin)) return RP_EUF;
     int pin = _pin;
     uint8_t gpio_N, gpio_P;
     int retval = rp_HPGetGPIO_N_Count(&gpio_N);
@@ -746,6 +780,11 @@ int rp_DpinSetDirection(rp_dpin_t _pin, rp_pinDirection_t direction) {
 }
 
 int rp_DpinGetDirection(rp_dpin_t _pin, rp_pinDirection_t* direction) {
+    if (!direction) return RP_UIA;
+    if (v19_ReservedPin(_pin)) {
+        *direction = (_pin == RP_DIO2_P || _pin == RP_DIO3_P || _pin == RP_DIO6_P) ? RP_IN : RP_OUT;
+        return RP_OK;
+    }
     int pin = _pin;
     uint8_t gpio_N, gpio_P;
     int retval = rp_HPGetGPIO_N_Count(&gpio_N);
@@ -784,6 +823,7 @@ int rp_DpinGetDirection(rp_dpin_t _pin, rp_pinDirection_t* direction) {
 }
 
 int rp_DpinSetState(rp_dpin_t _pin, rp_pinState_t state) {
+    if (v19_ReservedPin(_pin)) return RP_EUF;
     int pin = _pin;
     uint8_t gpio_N, gpio_P;
     int retval = rp_HPGetGPIO_N_Count(&gpio_N);
@@ -867,6 +907,7 @@ int rp_DpinGetState(rp_dpin_t _pin, rp_pinState_t* state) {
  */
 
 int rp_EnableDigitalLoop(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     hk_version_t ver = house_getHKVersion();
     switch (ver) {
         case HK_V1: {
@@ -900,10 +941,12 @@ int rp_EnableDigitalLoop(bool enable) {
 ///@{
 
 int rp_ApinReset() {
+    if (customhw_IsV19()) return RP_EUF;
     return rp_AOpinReset();
 }
 
 int rp_ApinGetValue(rp_apin_t pin, float* value, uint32_t* raw) {
+    if (customhw_IsV19()) return RP_EUF;
     if (pin <= RP_AOUT3) {
         return rp_AOpinGetValue(pin - RP_AOUT0, value, raw);
     } else if (pin <= RP_AIN3) {
@@ -913,6 +956,7 @@ int rp_ApinGetValue(rp_apin_t pin, float* value, uint32_t* raw) {
 }
 
 int rp_ApinGetValueRaw(rp_apin_t pin, uint32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (pin <= RP_AOUT3) {
         return rp_AOpinGetValueRaw(pin - RP_AOUT0, value);
     } else if (pin <= RP_AIN3) {
@@ -922,6 +966,7 @@ int rp_ApinGetValueRaw(rp_apin_t pin, uint32_t* value) {
 }
 
 int rp_ApinSetValue(rp_apin_t pin, float value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (pin <= RP_AOUT3) {
         return rp_AOpinSetValue(pin - RP_AOUT0, value);
     }
@@ -929,6 +974,7 @@ int rp_ApinSetValue(rp_apin_t pin, float value) {
 }
 
 int rp_ApinSetValueRaw(rp_apin_t pin, uint32_t value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (pin <= RP_AOUT3) {
         return rp_AOpinSetValueRaw(pin - RP_AOUT0, value);
     }
@@ -936,6 +982,7 @@ int rp_ApinSetValueRaw(rp_apin_t pin, uint32_t value) {
 }
 
 int rp_ApinGetRange(rp_apin_t pin, float* min_val, float* max_val) {
+    if (customhw_IsV19()) return RP_EUF;
     rp_channel_calib_t ch = convertPINCh(pin);
     if (pin >= RP_AOUT0 && pin <= RP_AOUT3) {
         float fs = rp_HPGetSlowDACFullScaleOrDefault(ch);
@@ -958,6 +1005,7 @@ int rp_ApinGetRange(rp_apin_t pin, float* min_val, float* max_val) {
  */
 
 int rp_AIpinGetValueRaw(int unsigned pin, uint32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     FILE* fp;
     switch (pin) {
         case 0:
@@ -984,6 +1032,7 @@ int rp_AIpinGetValueRaw(int unsigned pin, uint32_t* value) {
 }
 
 int rp_AIpinGetValue(int unsigned pin, float* value, uint32_t* raw) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t value_raw;
     int result = rp_AIpinGetValueRaw(pin, &value_raw);
     rp_channel_calib_t ch = convertPINCh((rp_apin_t)pin);
@@ -1019,6 +1068,7 @@ int rp_AIpinGetValue(int unsigned pin, float* value, uint32_t* raw) {
  */
 
 int rp_AOpinReset() {
+    if (customhw_IsV19()) return RP_EUF;
     for (int unsigned pin = 0; pin < 4; pin++) {
         ECHECK(rp_AOpinSetValueRaw(pin, 0))
     }
@@ -1026,6 +1076,7 @@ int rp_AOpinReset() {
 }
 
 int rp_AOpinSetValueRaw(int unsigned pin, uint32_t value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (pin >= 4) {
         return RP_EPN;
     }
@@ -1047,6 +1098,7 @@ int rp_AOpinSetValueRaw(int unsigned pin, uint32_t value) {
 }
 
 int rp_AOpinSetValue(int unsigned pin, float value) {
+    if (customhw_IsV19()) return RP_EUF;
     rp_channel_calib_t ch = convertPINCh((rp_apin_t)pin);
 
     float fs = 0;
@@ -1072,6 +1124,7 @@ int rp_AOpinSetValue(int unsigned pin, float value) {
 }
 
 int rp_AOpinGetValueRaw(int unsigned pin, uint32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (pin >= 4) {
         return RP_EPN;
     }
@@ -1091,6 +1144,7 @@ int rp_AOpinGetValueRaw(int unsigned pin, uint32_t* value) {
 }
 
 int rp_AOpinGetValue(int unsigned pin, float* value, uint32_t* raw) {
+    if (customhw_IsV19()) return RP_EUF;
 
     uint32_t value_raw;
     int result = rp_AOpinGetValueRaw(pin, &value_raw);
@@ -1123,6 +1177,7 @@ int rp_AOpinGetValue(int unsigned pin, float* value, uint32_t* raw) {
 }
 
 int rp_AOpinGetRange(int unsigned pin, float* min_val, float* max_val) {
+    if (customhw_IsV19()) return RP_EUF;
     rp_channel_calib_t ch = convertPINCh((rp_apin_t)pin);
     if (pin <= RP_AOUT3) {
         float fs = rp_HPGetSlowDACFullScaleOrDefault(ch);
@@ -1138,14 +1193,17 @@ int rp_AOpinGetRange(int unsigned pin, float* min_val, float* max_val) {
  */
 
 int rp_AcqSetArmKeep(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetArmKeep(RP_CH_1, enable);
 }
 
 int rp_AcqGetArmKeep(bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetArmKeep(RP_CH_1, state);
 }
 
 int rp_AcqSetArmKeepCh(rp_channel_t channel, bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetArmKeep(channel, enable);
     } else if (g_split_trig_function_pass) {
@@ -1155,6 +1213,7 @@ int rp_AcqSetArmKeepCh(rp_channel_t channel, bool enable) {
 }
 
 int rp_AcqGetArmKeepCh(rp_channel_t channel, bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetArmKeep(channel, state);
     } else if (g_split_trig_function_pass) {
@@ -1164,10 +1223,12 @@ int rp_AcqGetArmKeepCh(rp_channel_t channel, bool* state) {
 }
 
 int rp_AcqGetBufferFillState(bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetBufferFillState(RP_CH_1, state);
 }
 
 int rp_AcqGetBufferFillStateCh(rp_channel_t channel, bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetBufferFillState(channel, state);
     } else if (g_split_trig_function_pass) {
@@ -1177,20 +1238,24 @@ int rp_AcqGetBufferFillStateCh(rp_channel_t channel, bool* state) {
 }
 
 int rp_AcqAxiGetBufferFillState(rp_channel_t channel, bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetBufferFillState(channel, state);
 }
 
 int rp_AcqSetDecimation(rp_acq_decimation_t decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetDecimation(RP_CH_1, decimation);
 }
 
 int rp_AcqGetDecimation(rp_acq_decimation_t* decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetDecimation(RP_CH_1, decimation);
 }
 
 int rp_AcqSetDecimationCh(rp_channel_t channel, rp_acq_decimation_t decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetDecimation(channel, decimation);
     } else if (g_split_trig_function_pass) {
@@ -1200,6 +1265,7 @@ int rp_AcqSetDecimationCh(rp_channel_t channel, rp_acq_decimation_t decimation) 
 }
 
 int rp_AcqGetDecimationCh(rp_channel_t channel, rp_acq_decimation_t* decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetDecimation(channel, decimation);
     } else if (g_split_trig_function_pass) {
@@ -1209,14 +1275,17 @@ int rp_AcqGetDecimationCh(rp_channel_t channel, rp_acq_decimation_t* decimation)
 }
 
 int rp_AcqSetDecimationFactor(uint32_t decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetDecimationFactor(RP_CH_1, decimation);
 }
 
 int rp_AcqGetDecimationFactor(uint32_t* decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetDecimationFactor(RP_CH_1, decimation);
 }
 
 int rp_AcqSetDecimationFactorCh(rp_channel_t channel, uint32_t decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetDecimationFactor(channel, decimation);
     } else if (g_split_trig_function_pass) {
@@ -1226,6 +1295,7 @@ int rp_AcqSetDecimationFactorCh(rp_channel_t channel, uint32_t decimation) {
 }
 
 int rp_AcqGetDecimationFactorCh(rp_channel_t channel, uint32_t* decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetDecimationFactor(channel, decimation);
     } else if (g_split_trig_function_pass) {
@@ -1235,12 +1305,14 @@ int rp_AcqGetDecimationFactorCh(rp_channel_t channel, uint32_t* decimation) {
 }
 
 int rp_AcqAxiSetDecimationFactor(uint32_t decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_SetDecimationFactor(RP_CH_1, decimation);
 }
 
 int rp_AcqAxiSetDecimationFactorCh(rp_channel_t channel, uint32_t decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
@@ -1252,12 +1324,14 @@ int rp_AcqAxiSetDecimationFactorCh(rp_channel_t channel, uint32_t decimation) {
 }
 
 int rp_AcqAxiGetDecimationFactor(uint32_t* decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetDecimationFactor(RP_CH_1, decimation);
 }
 
 int rp_AcqAxiGetDecimationFactorCh(rp_channel_t channel, uint32_t* decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
@@ -1269,14 +1343,17 @@ int rp_AcqAxiGetDecimationFactorCh(rp_channel_t channel, uint32_t* decimation) {
 }
 
 int rp_AcqConvertFactorToDecimation(uint32_t factor, rp_acq_decimation_t* decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_ConvertFactorToDecimation(factor, decimation);
 }
 
 int rp_AcqGetSamplingRateHz(float* sampling_rate) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetSamplingRateHz(RP_CH_1, sampling_rate);
 }
 
 int rp_AcqGetSamplingRateHzCh(rp_channel_t channel, float* sampling_rate) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetSamplingRateHz(channel, sampling_rate);
     } else if (g_split_trig_function_pass) {
@@ -1286,14 +1363,17 @@ int rp_AcqGetSamplingRateHzCh(rp_channel_t channel, float* sampling_rate) {
 }
 
 int rp_AcqSetAveraging(bool enabled) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetAveraging(RP_CH_1, enabled);
 }
 
 int rp_AcqGetAveraging(bool* enabled) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetAveraging(RP_CH_1, enabled);
 }
 
 int rp_AcqSetAveragingCh(rp_channel_t channel, bool enabled) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetAveraging(channel, enabled);
     } else if (g_split_trig_function_pass) {
@@ -1303,6 +1383,7 @@ int rp_AcqSetAveragingCh(rp_channel_t channel, bool enabled) {
 }
 
 int rp_AcqGetAveragingCh(rp_channel_t channel, bool* enabled) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetAveraging(channel, enabled);
     } else if (g_split_trig_function_pass) {
@@ -1312,14 +1393,17 @@ int rp_AcqGetAveragingCh(rp_channel_t channel, bool* enabled) {
 }
 
 int rp_AcqSetTriggerSrc(rp_acq_trig_src_t source) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetTriggerSrc(RP_CH_1, source);
 }
 
 int rp_AcqGetTriggerSrc(rp_acq_trig_src_t* source) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetTriggerSrc(RP_CH_1, source);
 }
 
 int rp_AcqSetTriggerSrcCh(rp_channel_t channel, rp_acq_trig_src_t source) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetTriggerSrc(channel, source);
     } else if (g_split_trig_function_pass) {
@@ -1329,6 +1413,7 @@ int rp_AcqSetTriggerSrcCh(rp_channel_t channel, rp_acq_trig_src_t source) {
 }
 
 int rp_AcqGetTriggerSrcCh(rp_channel_t channel, rp_acq_trig_src_t* source) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetTriggerSrc(channel, source);
     } else if (g_split_trig_function_pass) {
@@ -1338,10 +1423,12 @@ int rp_AcqGetTriggerSrcCh(rp_channel_t channel, rp_acq_trig_src_t* source) {
 }
 
 int rp_AcqGetTriggerState(rp_acq_trig_state_t* state) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetTriggerState(RP_CH_1, state);
 }
 
 int rp_AcqGetTriggerStateCh(rp_channel_t channel, rp_acq_trig_state_t* state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetTriggerState(channel, state);
     } else if (g_split_trig_function_pass) {
@@ -1351,10 +1438,12 @@ int rp_AcqGetTriggerStateCh(rp_channel_t channel, rp_acq_trig_state_t* state) {
 }
 
 int rp_AcqSetTriggerDelay(int32_t decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetTriggerDelay(RP_CH_1, decimated_data_num);
 }
 
 int rp_AcqSetTriggerDelayCh(rp_channel_t channel, int32_t decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetTriggerDelay(channel, decimated_data_num);
     } else if (g_split_trig_function_pass) {
@@ -1364,10 +1453,12 @@ int rp_AcqSetTriggerDelayCh(rp_channel_t channel, int32_t decimated_data_num) {
 }
 
 int rp_AcqSetTriggerDelayDirect(uint32_t decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetTriggerDelayDirect(RP_CH_1, decimated_data_num);
 }
 
 int rp_AcqSetTriggerDelayDirectCh(rp_channel_t channel, uint32_t decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetTriggerDelayDirect(channel, decimated_data_num);
     } else if (g_split_trig_function_pass) {
@@ -1377,22 +1468,26 @@ int rp_AcqSetTriggerDelayDirectCh(rp_channel_t channel, uint32_t decimated_data_
 }
 
 int rp_AcqAxiSetTriggerDelay(rp_channel_t channel, int32_t decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_SetTriggerDelay(channel, decimated_data_num);
 }
 
 int rp_AcqAxiGetTriggerDelay(rp_channel_t channel, int32_t* decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetTriggerDelay(channel, decimated_data_num);
 }
 
 int rp_AcqGetTriggerDelay(int32_t* decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetTriggerDelay(RP_CH_1, decimated_data_num);
 }
 
 int rp_AcqGetTriggerDelayCh(rp_channel_t channel, int32_t* decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetTriggerDelay(channel, decimated_data_num);
     } else if (g_split_trig_function_pass) {
@@ -1402,10 +1497,12 @@ int rp_AcqGetTriggerDelayCh(rp_channel_t channel, int32_t* decimated_data_num) {
 }
 
 int rp_AcqGetTriggerDelayDirect(uint32_t* decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetTriggerDelayDirect(RP_CH_1, decimated_data_num);
 }
 
 int rp_AcqGetTriggerDelayDirectCh(rp_channel_t channel, uint32_t* decimated_data_num) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetTriggerDelayDirect(channel, decimated_data_num);
     } else if (g_split_trig_function_pass) {
@@ -1415,10 +1512,12 @@ int rp_AcqGetTriggerDelayDirectCh(rp_channel_t channel, uint32_t* decimated_data
 }
 
 int rp_AcqSetTriggerDelayNs(int64_t time_ns) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetTriggerDelayNs(RP_CH_1, time_ns);
 }
 
 int rp_AcqSetTriggerDelayNsCh(rp_channel_t channel, int64_t time_ns) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetTriggerDelayNs(channel, time_ns);
     } else if (g_split_trig_function_pass) {
@@ -1428,10 +1527,12 @@ int rp_AcqSetTriggerDelayNsCh(rp_channel_t channel, int64_t time_ns) {
 }
 
 int rp_AcqGetTriggerDelayNs(int64_t* time_ns) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetTriggerDelayNs(RP_CH_1, time_ns);
 }
 
 int rp_AcqGetTriggerDelayNsCh(rp_channel_t channel, int64_t* time_ns) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetTriggerDelayNs(channel, time_ns);
     } else if (g_split_trig_function_pass) {
@@ -1441,10 +1542,12 @@ int rp_AcqGetTriggerDelayNsCh(rp_channel_t channel, int64_t* time_ns) {
 }
 
 int rp_AcqSetTriggerDelayNsDirect(uint64_t time_ns) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetTriggerDelayNsDirect(RP_CH_1, time_ns);
 }
 
 int rp_AcqSetTriggerDelayNsDirectCh(rp_channel_t channel, uint64_t time_ns) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetTriggerDelayNsDirect(channel, time_ns);
     } else if (g_split_trig_function_pass) {
@@ -1454,10 +1557,12 @@ int rp_AcqSetTriggerDelayNsDirectCh(rp_channel_t channel, uint64_t time_ns) {
 }
 
 int rp_AcqGetTriggerDelayNsDirect(uint64_t* time_ns) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetTriggerDelayNsDirect(RP_CH_1, time_ns);
 }
 
 int rp_AcqGetTriggerDelayNsDirectCh(rp_channel_t channel, uint64_t* time_ns) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetTriggerDelayNsDirect(channel, time_ns);
     } else if (g_split_trig_function_pass) {
@@ -1467,10 +1572,12 @@ int rp_AcqGetTriggerDelayNsDirectCh(rp_channel_t channel, uint64_t* time_ns) {
 }
 
 int rp_AcqGetPreTriggerCounter(uint32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetPreTriggerCounter(RP_CH_1, value);
 }
 
 int rp_AcqGetPreTriggerCounterCh(rp_channel_t channel, uint32_t* value) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetPreTriggerCounter(channel, value);
     } else if (g_split_trig_function_pass) {
@@ -1480,14 +1587,17 @@ int rp_AcqGetPreTriggerCounterCh(rp_channel_t channel, uint32_t* value) {
 }
 
 int rp_AcqGetGain(rp_channel_t channel, rp_pinState_t* state) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetGain(channel, state);
 }
 
 int rp_AcqGetGainV(rp_channel_t channel, float* voltage) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetGainV(channel, voltage);
 }
 
 int rp_AcqSetGain(rp_channel_t channel, rp_pinState_t state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsLV_HVOrDefault()) {
         return acq_SetGain(channel, state);
     }
@@ -1495,26 +1605,32 @@ int rp_AcqSetGain(rp_channel_t channel, rp_pinState_t state) {
 }
 
 int rp_AcqGetTriggerLevel(rp_channel_trigger_t channel, float* voltage) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetTriggerLevel(channel, voltage);
 }
 
 int rp_AcqSetTriggerLevel(rp_channel_trigger_t channel, float voltage) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetTriggerLevel(channel, voltage);
 }
 
 int rp_AcqGetTriggerHyst(float* voltage) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetTriggerHyst(voltage);
 }
 
 int rp_AcqSetTriggerHyst(float voltage) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetTriggerHyst(voltage);
 }
 
 int rp_AcqGetWritePointer(uint32_t* pos) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetWritePointer(RP_CH_1, pos);
 }
 
 int rp_AcqGetWritePointerCh(rp_channel_t channel, uint32_t* pos) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetWritePointer(channel, pos);
     } else if (g_split_trig_function_pass) {
@@ -1525,16 +1641,19 @@ int rp_AcqGetWritePointerCh(rp_channel_t channel, uint32_t* pos) {
 }
 
 int rp_AcqAxiGetWritePointer(rp_channel_t channel, uint32_t* pos) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetWritePointer(channel, pos);
 }
 
 int rp_AcqGetWritePointerAtTrig(uint32_t* pos) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetWritePointerAtTrig(RP_CH_1, pos);
 }
 
 int rp_AcqGetWritePointerAtTrigCh(rp_channel_t channel, uint32_t* pos) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         bool state;
         int ret = rp_AcqGetSplitTrigger(&state);
@@ -1553,16 +1672,19 @@ int rp_AcqGetWritePointerAtTrigCh(rp_channel_t channel, uint32_t* pos) {
 }
 
 int rp_AcqAxiGetWritePointerAtTrig(rp_channel_t channel, uint32_t* pos) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetWritePointerAtTrig(channel, pos);
 }
 
 int rp_AcqStart() {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_Start(RP_CH_1);
 }
 
 int rp_AcqStartCh(rp_channel_t channel) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_Start(channel);
     } else if (g_split_trig_function_pass) {
@@ -1573,10 +1695,12 @@ int rp_AcqStartCh(rp_channel_t channel) {
 }
 
 int rp_AcqStop() {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_Stop(RP_CH_1);
 }
 
 int rp_AcqStopCh(rp_channel_t channel) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_Stop(channel);
     } else if (g_split_trig_function_pass) {
@@ -1587,11 +1711,13 @@ int rp_AcqStopCh(rp_channel_t channel) {
 }
 
 int rp_AcqReset() {
+    if (customhw_IsV19()) return RP_EUF;
     ECHECK(acq_SetDefaultAll())
     return acq_ResetFpga();
 }
 
 int rp_AcqResetCh(rp_channel_t channel) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_Reset(channel);
     } else if (g_split_trig_function_pass) {
@@ -1602,14 +1728,17 @@ int rp_AcqResetCh(rp_channel_t channel) {
 }
 
 int rp_AcqResetFpga() {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_ResetFpga();
 }
 
 int rp_AcqUnlockTrigger() {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetUnlockTrigger(RP_CH_1);
 }
 
 int rp_AcqUnlockTriggerCh(rp_channel_t channel) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetUnlockTrigger(channel);
     } else if (g_split_trig_function_pass) {
@@ -1620,10 +1749,12 @@ int rp_AcqUnlockTriggerCh(rp_channel_t channel) {
 }
 
 int rp_AcqGetUnlockTrigger(bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetUnlockTrigger(RP_CH_1, state);
 }
 
 int rp_AcqGetUnlockTriggerCh(rp_channel_t channel, bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetUnlockTrigger(channel, state);
     } else if (g_split_trig_function_pass) {
@@ -1638,66 +1769,79 @@ uint32_t rp_AcqGetNormalizedDataPos(uint32_t pos) {
 }
 
 int rp_AcqGetDataPosRaw(rp_channel_t channel, uint32_t start_pos, uint32_t end_pos, int16_t* buffer, uint32_t* buffer_size) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetDataPosRaw(channel, start_pos, end_pos, buffer, buffer_size);
 }
 
 int rp_AcqGetDataPosRawNP(rp_channel_t channel, uint32_t start_pos, uint32_t end_pos, int16_t* np_buffer, int buffer_size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t size = buffer_size;
     return acq_GetDataPosRaw(channel, start_pos, end_pos, np_buffer, &size);
 }
 
 int rp_AcqGetDataPosV(rp_channel_t channel, uint32_t start_pos, uint32_t end_pos, float* buffer, uint32_t* buffer_size) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetDataPosV(channel, start_pos, end_pos, buffer, buffer_size);
 }
 
 int rp_AcqGetDataPosVNP(rp_channel_t channel, uint32_t start_pos, uint32_t end_pos, float* np_buffer, int buffer_size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t size = buffer_size;
     return acq_GetDataPosV(channel, start_pos, end_pos, np_buffer, &size);
 }
 
 int rp_AcqAxiGetMemoryRegion(uint32_t* _start, uint32_t* _size) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetMemoryRegion(_start, _size);
 }
 
 int rp_AcqAxiEnable(rp_channel_t channel, bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_Enable(channel, enable);
 }
 
 int rp_AcqGetDataRaw(rp_channel_t channel, uint32_t pos, uint32_t* size, int16_t* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetDataRaw(channel, pos, size, buffer, false);
 }
 
 int rp_AcqGetDataRawNP(rp_channel_t channel, uint32_t pos, int16_t* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t usize = size;
     return acq_GetDataRaw(channel, pos, &usize, np_buffer, false);
 }
 
 int rp_AcqGetDataRawWithCalib(rp_channel_t channel, uint32_t pos, uint32_t* size, int16_t* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetDataRaw(channel, pos, size, buffer, true);
 }
 
 int rp_AcqGetDataRawWithCalibNP(rp_channel_t channel, uint32_t pos, int16_t* np_buffer, int buffer_size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t size = buffer_size;
     return acq_GetDataRaw(channel, pos, &size, np_buffer, true);
 }
 
 int rp_AcqAxiGetDataRaw(rp_channel_t channel, uint32_t pos, uint32_t* size, int16_t* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetDataRaw(channel, pos, size, buffer);
 }
 
 int rp_AcqAxiGetDataRawDirect(rp_channel_t channel, uint32_t pos, uint32_t size, std::vector<std::span<int16_t>>* data) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetDataRawDirect(channel, pos, size, data);
 }
 
 int rp_AcqAxiGetDataRawNP(rp_channel_t channel, uint32_t pos, int16_t* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     uint32_t usize = size;
@@ -1705,47 +1849,57 @@ int rp_AcqAxiGetDataRawNP(rp_channel_t channel, uint32_t pos, int16_t* np_buffer
 }
 
 int rp_AcqGetData(uint32_t pos, buffers_t* out) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetData(pos, out);
 }
 
 int rp_AcqGetDataWithCorrection(uint32_t pos, uint32_t* size, int32_t offset, buffers_t* out) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetDataWithCorrection(pos, size, offset, out);
 }
 
 int rp_AcqGetOldestDataRaw(rp_channel_t channel, uint32_t* size, int16_t* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetOldestDataRaw(channel, size, buffer);
 }
 
 int rp_AcqGetOldestDataRawNP(rp_channel_t channel, int16_t* buff, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t usize = size;
     return acq_GetOldestDataRaw(channel, &usize, buff);
 }
 
 int rp_AcqGetLatestDataRaw(rp_channel_t channel, uint32_t* size, int16_t* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetLatestDataRaw(channel, size, buffer);
 }
 
 int rp_AcqGetLatestDataRawNP(rp_channel_t channel, int16_t* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t usize = size;
     return acq_GetLatestDataRaw(channel, &usize, np_buffer);
 }
 
 int rp_AcqGetDataV(rp_channel_t channel, uint32_t pos, uint32_t* size, float* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetDataV(channel, pos, size, buffer);
 }
 
 int rp_AcqGetDataVNP(rp_channel_t channel, uint32_t pos, float* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t usize = size;
     return acq_GetDataV(channel, pos, &usize, np_buffer);
 }
 
 int rp_AcqAxiGetDataV(rp_channel_t channel, uint32_t pos, uint32_t* size, float* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetDataV(channel, pos, size, buffer);
 }
 
 int rp_AcqAxiGetDataVNP(rp_channel_t channel, uint32_t pos, float* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     uint32_t usize = size;
@@ -1753,78 +1907,93 @@ int rp_AcqAxiGetDataVNP(rp_channel_t channel, uint32_t pos, float* np_buffer, in
 }
 
 int rp_AcqGetOldestDataV(rp_channel_t channel, uint32_t* size, float* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetOldestDataV(channel, size, buffer);
 }
 
 int rp_AcqGetOldestDataVNP(rp_channel_t channel, float* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t usize = size;
     return acq_GetOldestDataV(channel, &usize, np_buffer);
 }
 
 int rp_AcqGetLatestDataV(rp_channel_t channel, uint32_t* size, float* buffer) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetLatestDataV(channel, size, buffer);
 }
 
 int rp_AcqGetLatestDataVNP(rp_channel_t channel, float* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     uint32_t usize = size;
     return acq_GetLatestDataV(channel, &usize, np_buffer);
 }
 
 int rp_AcqGetBufSize(uint32_t* size) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetBufferSize(size);
 }
 
 int rp_AcqAxiSetBufferSamples(rp_channel_t channel, uint32_t address, uint32_t samples) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_SetBufferSamples(channel, address, samples);
 }
 
 int rp_AcqAxiSetBufferBytes(rp_channel_t channel, uint32_t address, uint32_t size) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_SetBufferBytes(channel, address, size);
 }
 
 int rp_AcqSetAC_DC(rp_channel_t channel, rp_acq_ac_dc_mode_t mode) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetFastADCIsAC_DCOrDefault())
         return RP_NOTS;
     return acq_SetAC_DC(channel, mode);
 }
 
 int rp_AcqGetAC_DC(rp_channel_t channel, rp_acq_ac_dc_mode_t* status) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetFastADCIsAC_DCOrDefault())
         return RP_NOTS;
     return acq_GetAC_DC(channel, status);
 }
 
 int rp_AcqSetBypassFilter(rp_channel_t channel, bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetEqFilterBypass(channel, enable);
 }
 
 int rp_AcqGetBypassFilter(rp_channel_t channel, bool* enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetEqFilterBypass(channel, enable);
 }
 
 int rp_AcqUpdateAcqFilter(rp_channel_t channel) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetFastADCIsFilterPresentOrDefault())
         return RP_NOTS;
     return acq_UpdateAcqFilter(channel);
 }
 
 int rp_AcqGetFilterCalibValue(rp_channel_t channel, uint32_t* coef_aa, uint32_t* coef_bb, uint32_t* coef_kk, uint32_t* coef_pp) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetFastADCIsFilterPresentOrDefault())
         return RP_NOTS;
     return acq_GetFilterCalibValue(channel, coef_aa, coef_bb, coef_kk, coef_pp);
 }
 
 int rp_AcqSetCalibInFPGA(rp_channel_t channel) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsCalibInFPGAOrDefault())
         return RP_NOTS;
     return acq_SetCalibInFPGA(channel);
 }
 
 int rp_AcqGetCalibInFPGA(rp_channel_t channel, bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsCalibInFPGAOrDefault())
         return RP_NOTS;
     return acq_GetCalibInFPGA(channel, state);
@@ -2214,14 +2383,17 @@ int rp_GenGetGainOut(rp_channel_t channel, rp_gen_gain_t* status) {
 }
 
 int rp_SetEnableDaisyChainTrigSync(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return house_SetEnableDaisyChainSync(enable);
 }
 
 int rp_GetEnableDaisyChainTrigSync(bool* status) {
+    if (customhw_IsV19()) return RP_EUF;
     return house_GetEnableDaisyChainSync(status);
 }
 
 int rp_SetEnableDiasyChainClockSync(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
 
     if (!rp_HPGetIsDaisyChainClockAvailableOrDefault())
         return RP_NOTS;
@@ -2241,6 +2413,7 @@ int rp_SetEnableDiasyChainClockSync(bool enable) {
 }
 
 int rp_GetEnableDiasyChainClockSync(bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
 
     if (!rp_HPGetIsDaisyChainClockAvailableOrDefault())
         return RP_NOTS;
@@ -2264,18 +2437,22 @@ int rp_GetEnableDiasyChainClockSync(bool* state) {
 }
 
 int rp_SetDpinEnableTrigOutput(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     return house_SetDpinEnableTrigOutput(enable);
 }
 
 int rp_GetDpinEnableTrigOutput(bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     return house_GetDpinEnableTrigOutput(state);
 }
 
 int rp_SetSourceTrigOutput(rp_outTiggerMode_t mode) {
+    if (customhw_IsV19()) return RP_EUF;
     return house_SetSourceTrigOutput(mode);
 }
 
 int rp_GetSourceTrigOutput(rp_outTiggerMode_t* mode) {
+    if (customhw_IsV19()) return RP_EUF;
     return house_GetSourceTrigOutput(mode);
 }
 
@@ -2288,10 +2465,12 @@ int rp_GetCANModeEnable(bool* _enable) {
 }
 
 int rp_AcqSetExtTriggerDebouncerUs(double value) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetExtTriggerDebouncerUs(value);
 }
 
 int rp_AcqGetExtTriggerDebouncerUs(double* value) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetExtTriggerDebouncerUs(value);
 }
 
@@ -2422,6 +2601,7 @@ int rp_GetExternalTriggerLevel(float* value) {
 }
 
 int rp_AcqSetSplitTrigger(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_SetSplitTriggerMode(enable);
     }
@@ -2430,6 +2610,7 @@ int rp_AcqSetSplitTrigger(bool enable) {
 }
 
 int rp_AcqGetSplitTrigger(bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (rp_HPGetFastADCIsSplitTriggerOrDefault()) {
         return acq_GetSplitTriggerMode(state);
     }
@@ -2438,80 +2619,95 @@ int rp_AcqGetSplitTrigger(bool* state) {
 }
 
 int rp_AcqSetSplitTriggerPass(bool enable) {
+    if (customhw_IsV19()) return RP_EUF;
     g_split_trig_function_pass = enable;
     return RP_OK;
 }
 
 int rp_AcqGetSplitTriggerPass(bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     *state = g_split_trig_function_pass;
     return RP_OK;
 }
 
 int rp_AcqSetOffset(rp_channel_t channel, float value) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_SetOffset(channel, value);
 }
 
 int rp_AcqGetOffset(rp_channel_t channel, float* value) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_GetOffset(channel, value);
 }
 
 int rp_AcqAxiSetOffset(rp_channel_t channel, float value) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_axi_SetOffset(channel, value);
 }
 
 int rp_AcqAxiGetOffset(rp_channel_t channel, float* value) {
+    if (customhw_IsV19()) return RP_EUF;
     return acq_axi_GetOffset(channel, value);
 }
 
 int rp_GenAxiGetMemoryRegion(uint32_t* _start, uint32_t* _size) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return acq_axi_GetMemoryRegion(_start, _size);
 }
 
 int rp_GenAxiSetEnable(rp_channel_t channel, bool state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return gen_axi_SetEnable(channel, state);
 }
 
 int rp_GenAxiGetEnable(rp_channel_t channel, bool* state) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return gen_axi_GetEnable(channel, state);
 }
 
 int rp_GenAxiReserveMemory(rp_channel_t channel, uint32_t start, uint32_t end) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return gen_axi_ReserveMemory(channel, start, end);
 }
 
 int rp_GenAxiReleaseMemory(rp_channel_t channel) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return gen_axi_ReleaseMemory(channel);
 }
 
 int rp_GenAxiSetDecimationFactor(rp_channel_t channel, uint32_t decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return gen_axi_SetDecimation(channel, decimation);
 }
 
 int rp_GenAxiGetDecimationFactor(rp_channel_t channel, uint32_t* decimation) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return gen_axi_GetDecimation(channel, decimation);
 }
 
 int rp_GenAxiWriteWaveform(rp_channel_t channel, float* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return gen_axi_WriteWaveform(channel, np_buffer, size);
 }
 
 int rp_GenAxiWriteWaveformOffset(rp_channel_t channel, uint32_t offset, float* np_buffer, int size) {
+    if (customhw_IsV19()) return RP_EUF;
     if (!rp_HPGetIsDMAinv0_94OrDefault())
         return RP_NOTS;
     return gen_axi_WriteWaveform(channel, offset, np_buffer, size);

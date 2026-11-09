@@ -1,0 +1,19 @@
+{
+  "schema": "v18-calibration-bundle-v1",
+  "bitstream_label": "v18_20261026_140711",
+  "source_run": "20261026T150410_720673Z",
+  "input": "SINGLE",
+  "width_version": 18,
+  "tick_ps": 4000,
+  "taps": 512,
+  "calibration_file": "v18_luts.json",
+  "frame_offsets_file": "v18_frame_offsets.json",
+  "files_sha256": {
+    "v18_luts.json": "2db572d6d85ba1b69f2f1637e6e62b0363a5b56c7696c0b32a14db99323a5c1a",
+    "v18_frame_offsets.json": "d1254b4684e28ba9296aa08064650db96737d10bbc2361a489cc6f6d93592e28"
+  },
+  "original_lut_file_sha256": "2db572d6d85ba1b69f2f1637e6e62b0363a5b56c7696c0b32a14db99323a5c1a",
+  "original_lut_file": "candidate_luts.json",
+  "provenance_note": "Exact copy of qualified V18 tables. Build association comes from the session/run history; original image metadata has a placeholder bitstream label. Version alone cannot verify physical placement. Historical absolute paths inside the source JSON are provenance only, not runtime dependencies.",
+  "reference_bitstream_sha256": "6e8dbb697df68015162b41b09eb2810246628479ed803b356029ebe15f2450bb"
+}

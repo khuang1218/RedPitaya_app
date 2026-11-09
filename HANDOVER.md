@@ -1,12 +1,756 @@
 # Red Pitaya master handover
 
-Updated: 2026-10-22. Target: STEMlab 125-14 Z7020 Gen 2 / Z20_G2, xc7z020clg400-1; existing Vivado project uses 2020.1.
+Updated: 2026-11-04. Target: STEMlab 125-14 Z7020 Gen 2 / Z20_G2, xc7z020clg400-1; existing Vivado project uses 2020.1.
+
+### 2026-11-04: V19 hardware sources prepared
+
+2026-11-06 software update now authorized: API/SCPI sources support both v19
+TDCs with explicit rp_Tdc...Ch(RP_CH_1/RP_CH_2, ...) variants and TDC1:/TDC2:
+commands; original API/TDC: always selects core1. Per-core transaction locks
+and mappings, no global channel selector. Width ARM no longer requires50%;
+retains hardware minimum period, HIGH/LOW>=8ns, frame/input/timeout guards.
+Pulse duty-percent setters/readbacks added; frequency preserves actual duty
+with integer rounding. New rp_DacSpi... API and DAC: command family implement
+four-code load+LDAC/load-only/apply, raw read/write, period/frequency/LDAC width,
+status/counters/readbacks and bounded non-retrying completion checks. Raw reads
+slow temporarily for MISO; no assumed DAC voltage/reference setup writes.
+V19 startup skips AMS/daisy/acquisition/BNET, retains HK/ASG, protects reserved
+GPIO/LED7 writes and hides absent engines/DDR ASG in SCPI. V18 startup retained.
+Details/build/examples: scpi-server/V19_SOFTWARE.md. Offline regression uses
+actual API/table/handlers/libscpi and a register model; board validation and
+server deployment remain user-run. No notebook or FPGA source changes in this
+software request. Earlier hardware-only software deferral below is superseded.
+Validation complete: all12 modified production translation units compile with
+host GCC15/C++20; dual-TDC/DAC/SCPI model regression, existing legacy/V16/V17
+compatibility regression and actual rp.cpp startup/guard regression pass.
+Existing host-width printf warnings remain in the AMS debug header. No target
+ARM build, deployment or physical DAC qualification performed. Source overlay:
+build/v19-software/red_pitaya_v19_software_sources.zip (28files, SHA256 checked).
+
+2026-11-06 audit-call repair: routed build20261106_153052 passes timing:
+WNS+0.017ns/TNS0, WHS+0.006ns, zero failing setup/hold/pulse-width endpoints;
+DRC warnings only. This supersedes the older failed route below. Script stopped
+at the stale tdc_audit_width_sampler_layout call; definition is v19-specific.
+Corrected call and generator; actual Tcl execution validates all2048samplers
+and rejects invalid placement fixtures. Routed physical audit is still pending.
+Use scripts/finish_tdc_v19.tcl in the existing open project: reopen completed
+impl_1, rerun structure/layout/timing/DRC gates, write red_pitaya_v19.bit/.bin.
+No resynthesis/reroute required for this Tcl-only repair. Full build now shares
+that finalization. No agent Vivado execution, bitstream generation or programming.
+
+2026-11-05 routed receive-bank repair: build20261105_173214 reached post-route
+optimization. Transmit preservation and both7-RAMB36 ASG tables survive. SPI
+MISO meta/sync and rx_shift/raw_rx banks are absent in the routed EDIF; reject
+checkpoint. Preserve both receive banks and both ASYNC_REG/SHREG_EXTRACT=NO
+settling stages, check stages plus complete24-bit banks at synth and route.
+Source sampling/register semantics unchanged. Local SPI holds1/2/3 and full-top
+elaboration pass. Route also has4setup failures: WNS−0.194ns/TNS−0.429ns,
+WHS+0.006ns/0hold failures. Encoder leading-count and completion paths, not
+ASG or SPI outputs.117/140BRAM,22365LUT,50547FF,9564occupied slices. These are
+rejected-route measurements. Build now requests supported ExtraTimingOpt /
+AggressiveExplore effort with unchanged clocks/constraints; fresh route must
+prove closure. Output remains red_pitaya_v19.bit; no agent Vivado/board access.
+
+2026-11-05 SPI preservation repair: latest15:03 synthesis confirms7 ASG waveform
+RAMB36s per channel, so the ASG preservation change worked. The checker then
+found only3 SPI output FFs. Direct EDIF inspection confirms MOSI's IOBUF input
+is tied low and the raw transmit/shift/MOSI data register names disappeared.
+Reject this checkpoint. SPI now keeps hierarchy, preserves raw_tx/tx_shift and
+uses explicit preserved/IOB mosi_pin FF; output timing bounds remain4ns.
+Checker requires all4 individual output FFs and both24-bit transmit register
+banks. SPI simulation holds1/2/3 and full-top elaboration pass; fresh external
+synthesis/implementation still required. Output stays red_pitaya_v19.bit.
+
+First external v19 synthesis completed18:10 but failed the ASG structural check.
+The saved DCP contains7 waveform RAMB36s under chB,0under chA; Synth8-223 lists
+decloning of each chA RAM into chB. Initial inference listed7per channel.
+Keep the guard: this does not establish independent two-channel waveform memory.
+The rejected synthesis reports111BRAMtiles,34877LUTs,59043FFs; not routed fit.
+Repair uses dedicated v19 ASG copies with unchanged register/arithmetic logic,
+preserved channel hierarchy and explicit block/DONT_TOUCH waveform memories.
+Original v18 ASG files stay unchanged. Fresh full build required; do not resume
+the rejected checkpoint. MMIO table/config isolation regression passes, full-top
+elaboration143sources/0errors/17existingwarnings. Later software duty-cycle
+restriction removal remains deferred.
+
+User requests hardware first: two independent TDCs preserving v18 features,
+two local-table ASG outputs, the common pulse generator, DAC80516 SPI for four
+weights with LDAC, and unconditional LED7 heartbeat. Remove unused scope/ADC
+acquisition, PID, BNET, AMS/PWM and daisy engines from the v19 hierarchy.
+The new dedicated top is `red_pitaya_top_v19.sv`; v18 remains the qualified
+reference. V19 routed timing/utilization and board performance are not yet
+qualified. Do not run Vivado locally or program hardware; build externally.
+
+Reviewable source overlay and validation helpers: `hardware/v19/`.
+Detailed hardware map/build/software follow-up:
+`hardware/v19/prj/v0.94/doc/tdc_v19_hardware.md`.
+The17 reviewed source/constraint/test/doc files are installed in the FPGA repo;
+the two changed TDC wrapper originals are backed up under
+`build/tdc-v19-review/pre-v19-sources/`. Default wrapper identity remains18 for
+the v18 top; v19 explicitly selects19. External build helper:
+`prj/v0.94/scripts/build_tdc_v19.tcl`. The new source bundle is
+`build/tdc-v19-review/tdc-v19-source-bundle.zip`.
+Latest output-name instruction (2026-11-04): v19 must write
+`impl_1/red_pitaya_v19.bit` and its `red_pitaya_v19.bin` companion, matching
+the versioned v18 naming convention. This supersedes the older red_pitaya_top.bit naming
+preference for v19 only. The helper retains setup/hold/DRC gates and does not
+program hardware. Update any bootgen BIF to reference the new filename.
+TDC1 stays at0x40710000, pulse at0x40720000; TDC2 at0x40730000, SPI at0x40740000.
+Both TDC IDs are0x54444313; independent rise/fall LUTs must be calibrated for
+the new route. All v18 TDC capture/encoder/pulse datapaths are retained.
+
+**Later software fix explicitly requested: remove the artificial50% duty-cycle
+restriction.** Support independent pulse frequency/HIGH/duty settings and actual
+quantized readback. Keep the genuine2 ns pulse grid,40 ns minimum TDC frame and
+characterized HIGH/LOW limits. Add two-channel TDC and SPI interfaces; remove
+initialization/advertising for deleted application engines. No software/API/
+SCPI/notebook behavior is changed by this hardware-first request.
+
+Local validation: complete141-source Slang12 top elaboration with actual vendor
+primitive declarations passed0errors/17existing infrastructure warnings;
+generated PS/IP remains external. SPI protocol/timing/readback/atomic group/
+busy/reset checks passed with1/2/3-cycle bus requests. Two simultaneous512-tap
+width engines passed16-record captures with distinct96/160ns widths and
+independent LUT/frame offset/clear for1/2/3-cycle bus holds. V19 legacy/width
+isolation, ID, reset/FIFO/LUT regression passed. Retained512-tap fine pipeline
+passed32records at40ns frames (25MHz). Vendor ODDR pulse regression passed
+holds1/2/3 including unequal HIGH settings. Tcl structure and flat XDC syntax
+passed with mocked collection APIs; actual synthesized names and physical
+placement/timing still require the external build. No Vivado or board access.
 
 This is the authoritative workspace handover for BNET, the CARRY4 TDC (currently focused on single-ended input), and the single-channel GPIO pulse generator. It replaces the separate BNET and pulse handovers. Repository source, public headers, command tables and the TDC register specification remain the detailed interface references.
 
 ## 1. Current objective and working rules
 
-### Latest update: V16 5 MHz source and precision investigation, October 22
+New standalone VTC PCB notebook: scpi-tests/vtc_pcb_v18_100khz.ipynb.
+AWG CH1 drives PCB voltage input (no matrix); FPGA DIO1_P triggers PCB at fixed
+100 kHz/50%; PCB pulse return goes to SINGLE DIO2_P. Both FPGA analogue outputs
+stay OFF. Readable cells cover waveform configuration, bundle/hash checks,
+optional fixed return-window check, one-time LUT upload/activation/offset,
+batch acquisition, plots, optional DC transfer sweep and commented recovery.
+Supports DC/SINE/SQUARE/RAMP/TRIANGLE and custom normalized ARB samples via
+vtc_pcb_tools.py, reusing Rigol transport and hardware-free demo definitions.
+ARB is periodically interpolated to 16384 samples for basic-mode playback and
+uploaded in 1024-point DAC chunks to INT:\vtc_pcb_test.arb only; same-name test
+file overwritten. Voltage bounds are user settings, default 0..1 V, High-Z.
+No AWG/FPGA phase matching or capture retries. Trigger stays running between
+cases; full raw only for complete successful bursts, diagnostics otherwise.
+Dynamic input voltage is not measured/phase-locked, so no invented per-frame
+voltage mapping; optional DC sweep pairs nominal voltage with mean/SD width.
+Seven new offline tests passed, including complete batch, incomplete-stop
+retention, ARB packet roundtrip, readback mismatch and fixed FPGA rate checks.
+No hardware commands run by agent; executed characterisation notebooks unchanged.
+
+Demo timing clarified: the actual PCB return is causally triggered by FPGA
+DIO1_P; the AWG only modulates the matrix input. Independent-AWG edge drift
+and phase-retry yield below must not be projected onto this setup. The helpers
+reference now defaults explicitly to PCB frame offset 0, does not read the
+historical AWG offset map in its example flow, and retains one capture/no retries.
+Optional pure check_pcb_return_window() validates supplied launch-referenced
+rise-delay bounds plus maximum width against both frame boundaries; no PCB
+latency value has been measured or assumed by code. Default guard 8 ns is a
+starting margin, not a jitter qualification. Fixed common delay cancels in
+width. No AWG-derived host bias correction applied to PCB. Capture metadata
+identifies fpga_triggered_pcb with automatic_retries=0. LUT/offset remain
+one-time setup, reused between captures. Executed AWG notebooks untouched.
+
+100 kHz results reviewed: completed run20261026T210023_691148Z. Earlier
+20261026T202646_898818Z stopped on SCPI WinError10054; not a completed run.
+Assessment: build/tdc-100khz-review/assessment.html,100khz_results.png,review.json.
+Verified277504 selected complete raw records, including172032 fine records,
+against frame IDs/flags/means and exact uploaded LUT arithmetic. Tables match
+the portable V18 bundle. No notebook/capture/calibration files changed in review.
+All46 pulse measurements accepted;53 total starts,40 first-start successes,
+299803/314368 frames complete across all attempts (95.37%). Offset0ns observed
+at100kHz; still independent-source phase/startup conditioned, not phase lock.
+Full16384 fine records at500.2ns passed first start over163.84ms:mean502.174276ns,
+SD44.484ps,bias+1.974276ns,block-mean span9.854ps.10ns steps measured9.930008,
+10.067614,9.929407,10.049320ns (worst change error70.6ps vs nominal AWG).
+Fine precision repeats:20.2ns SD50–52ps,bias+2.868..+2.939ns;100.2ns116–127ps,
+bias+2.161..+2.216ns;500.2ns43–307ps with tails in2starts (203/64 beyond1ns from
+median);2000.2ns45–46ps,bias+1.936..+1.970ns. Broad tails not fully solved.
+Host-only correction measured_ns−2.011952942ns trained on4stable widths;
+1000.2ns training excluded (SD310ps,block span0.443ns). Held-out150.2/350.2/
+750.2/1500.2ns mean residuals−0.103/−0.082/−0.102/−0.061ns,SD42–58ps,no unseen
+codes. Not uploaded to FPGA; no independent scope reference supplied.
+Both edges drift~803ns over163.2ms (~4.92ppm relative mismatch), while sparse
+width change range is0.240ns; common drift cancels in width but can affect framing.
+Evidence supports planned~10ns finite-burst PCB demo; no HDL change justified
+for that goal. PCB/DAC voltage-to-weight transfer remains untested. Portable
+LUT/offset bundle deliberately unchanged;100kHz profile lives in the run folder.
+
+Characterization notebook (now executed by user; chronology below):
+scpi-tests/tdc_rigol_v18_100khz_characterisation.ipynb, with small helper
+tdc_100khz_tools.py and offline tests. Rigol DG5502 Pro CH1 directly to
+DIO2_P/E1 pin7,0/3.3 V; no PCB or analogue weights in this calibration.
+Only100 kHz main tests; no25 MHz diagnostic gate. FPGA OUT1/OUT2 parked OFF.
+Default restore portable V18 LUTs via manifest/hardware/hash checks; preserves
+original image metadata and reconciles only the old placeholder label/nullWNS.
+Optional fresh density uses matched rates99703/99103/98303 Hz,8 rounds8192 each,
+usual quality gates unchanged. Small explicit offset screen optional; does not
+scan all2500 offsets or confuse software restart phase with pin delay.
+Main tests: DC/identity/startup, coarse/fine widths20.2/100.2/500.2/2000.2 ns,
+host-only width-reference fitting on100.2/250.2/500.2/1000.2/2000.2 ns with
+separate held-out widths150.2/350.2/750.2/1500.2 ns,10 ns steps480.2..520.2,
+and16384-frame fine burst (163.84 ms). Failed reference fits retained without
+stopping remaining characterization. Host correction never uploaded to FPGA.
+Output100khz_profile.json stays in new machine-local tdc_rigol_100khz_results;
+does not overwrite portable bundle automatically. Captures retain full raw only
+when fully complete. No hardware cells executed here. Additional calibration
+discussion covers width bias/scale/nonlinearity, clock/reference accuracy,
+threshold/slew/levels, stability and later PCB/DAC voltage-to-weight mapping.
+
+100 kHz demo artifacts: 100kHz_demo/100kHz_matrix_demo.ipynb and SCPI_COMMANDS.md.
+User clarified OUT1/OUT2 are two analogue matrix-weight controls for one input;
+defaults DC, native ASG time-varying waveforms also supported. External AWG
+modulates the matrix input and must not be controlled by this notebook.
+One SINGLE/DIO2_P pulse-width TDC return, DIO1_P100 kHz50% launch. Helpers are
+defined entirely in the notebook; no Rigol dependencies. User now requests
+FINE mode with same-route V18 RISE/FALL LUT upload/readback. The notebook was
+refactored to a helpers-only reference: every code cell is settings/definitions,
+no hardware calls on Run All. Removed run_demo entirely. The future actual demo
+notebook is explicitly deferred. A documented flow shows prepare_tdc,
+configure_launch, set_frame_offset, read_calibration, upload_luts,
+enable_fine_mode, independent DC/dynamic weight setters, start_weights,
+start_launch, capture_burst and explicit finally/stop_outputs/save_capture.
+Upload LUTs and set offset ONCE after reload; capture_burst reuses both and
+requires fine ON. No silent retries. Caller cleanup stops both DACs/PULSE;
+save_capture retains full CSV only if fully valid/DONE and cleanup succeeds,
+otherwise compact metadata. Portable calibration inputs now live in100kHz_demo:
+v18_luts.json is a byte-identical copy of qualified V18 run
+20261026T150410_720673Z/candidate_luts.json; v18_frame_offsets.json contains
+tested-period offsets1000/200/100/52/40ns->0ns and68ns->12ns.10000ns/100kHz->0ns
+is explicitly an UNVERIFIED starting value, not a calibrated result. No universal
+width-bias offset exists. Manifest records file SHA256s and reference V18.bit
+hash/build v18_20261026_140711/SINGLE. Notebook resolves these files locally
+from its folder or repository root; no old PC data directory dependency.
+read_frame_offset loads the per-period setting and flags the unverified default.
+Exact-route provenance is documented separately because the original candidate
+JSON build label is a placeholder. No FPGA LUT/offset upload performed here.
+Offline protocol/retention/error-cleanup/LUT tests are in test_demo_offline.py.
+Notebook hardware cells have NOT been run here; user must verify with the PCB.
+
+Persistent user preference (October26): future build helpers must write the
+bitstream to the original impl_1 directory as red_pitaya_top.bit, so the existing
+red_pitaya_top.bif/bootgen/red_pitaya_top.bit.bin workflow stays unchanged.
+build_tdc_v18.tcl now does this; timestamped folders retain reports/checkpoints.
+The repaired external V18 build in tdc_v18_reports/20261026_140711 passed setup
+WNS +0.008 ns and hold WHS +0.013 ns, zero failures, and generated its original
+version-named bit/bin at14:44:04 before this output-path preference was applied.
+
+### V18 tested: timing closed; first demonstration target100 kHz / about10 ns resolution
+
+Reviewed executed V18 notebook/run20261026T150410_720673Z against final V17
+run20261026T075748_085860Z. Report: build/tdc-v18-review/V18_assessment.html;
+plot and v18_vs_v17_results.json. User considers about10 ns resolution sufficient
+for a first100 kHz demonstration. Suitable candidate, but NO100 kHz captures
+exist in this run: verify actual rate/PCB widths and repeated complete bursts.
+All18 V18 rate/duty settings have4096 complete calibrated records after retries;
+50 starts versus62 for final V17 sweep, all-attempt yields38.4% versus29.5%.
+Full-depth25 MHz:16384 valid/calibrated,2 starts,mean22.202957 ns for20.2 ns,
+SD448.85 ps,bias+2.002957 ns,block-mean span1.160872 ns. V17:5 starts,305.08 ps
+SD,bias+2.445178 ns,block span0.877527 ns. Improvement is mixed, not a broad
+precision/bias cure. V18 nine8192-pulse repeats have34–195 ps SD but width bias
+and independent-start variation persist;28.2 ns means span2.288 ns.12.2 ns bias
+is+3.374..+3.532 ns. Both196608-sample edge LUTs pass with no missing-code errors.
+Independently checked flags/counts/means/fine LUT arithmetic for163840 V18 raw
+records and229376 V17 records. No acquisitions or saved notebook edits made.
+Notebook image label/WNS are still placeholders (null); its provisional timing
+warning is metadata, while the external20261026_140711 report passes+0.008 ns.
+Do not infer verified100 kHz operation, continuous streaming, or absolute
+sub-nanosecond accuracy. At100 kHz16384 frames take163.84 ms before readout.
+
+Earlier V18 build/repair chronology follows; unbuilt/unknown-timing statements
+below refer to earlier stages and are superseded by the current results above.
+
+External V18 route completed October26 at12:00 with WNS -0.164 ns,
+TNS -0.456 ns,7 setup endpoints and WHS +0.007 ns (no hold failures).
+Post-route optimization finished at12:28, improving to WNS -0.144 ns,
+TNS -0.155 ns,3 setup endpoints and WHS +0.007 ns. LUT control paths pass;
+remaining paths are ODDR D2 -144 ps, ODDR D1 -7 ps and phase-to-ddr_data -3 ps.
+The repaired sources (subsequently built successfully as noted above) remove the extra 2.5 ns
+ODDR placement target and use normal SAME_EDGE clock-based setup/hold checks;
+the pulse HIGH comparator is split into parallel byte groups without latency
+changes. Pulse vendor-model holds1/2/3 pass including 10,894 compare vectors,
+25 MHz12/20/28 ns waveforms, startup/markers/reset/carries; TDC legacy integration
+passes; Slang elaboration0 errors/0 warnings. TDC capture RTL was not changed.
+Use build_tdc_v18.tcl for a FULL REBUILD of this repair, not resume_tdc_v18.tcl.
+The build helper then falsely rejected STATUS 'Not started phys_opt_design
+(Post-Route)' before post-route optimization. Corrected the route-completion
+check to use run markers/checkpoint and continued optional optimization using
+launch_runs -next_step. New scripts/resume_tdc_v18.tcl resumes this existing
+V18 implementation without source refresh or synthesis/route reset. Six mocked
+Tcl control-flow cases passed; actual Vivado continuation remains external.
+Do not call the old route or current unbuilt repair timing closure. The earlier
+console-log fix alone did not change HDL; the subsequent requested repair does.
+
+The user completed V17 testing and authorized V18 preparation and capture
+cleanup. They explicitly selected **prepare sources for external Vivado build**
+and **keep full raw files only for fully complete bursts**. Do not run Vivado
+or control instruments/the board here. No V18 bitstream has been generated or
+loaded by this agent; revised-source implementation and hardware validation
+remain external.
+
+V17 assessment: `build/tdc-v18-review/V17_assessment.html`, scientific plot and
+`v17_analysis.json`. The completed run is `20261026T075748_085860Z`. The latest
+18 rate/duty settings each accepted4096 complete calibrated pulses, including
+25 MHz30/50/70%. The full16384-pulse25 MHz burst passed on start5 (655.36 us),
+mean22.645178 ns for20.2 ns requested, SD305 ps, bias+2.445 ns. Eight block
+means span0.878 ns. Final rate sweep:62 starts,74943/253952 complete frames
+(29.5%, including partial attempts). Accepted full bursts are not unconditional
+efficiency or continuous streaming. Nine8192-pulse fine bursts have91–330 ps
+within-burst SD but width-dependent bias up to+6.292 ns and means differing by
+2.256 ns between starts. LUT arithmetic/readback and code qualification pass;
+physical accuracy/phase stability remain unqualified. The last V17 route still
+has WNS-0.308 ns,11 setup endpoints,0 hold failures. Retain the capture design
+for V18 and prioritize timing before attributing errors to a new architecture.
+
+V18 source is **VERSION18 / ID0x54444312**, reset default **SINGLE/DIO2_P**;
+explicit LVDS selection and soft-reset selection preservation are retained.
+250 MHz sampler,512 taps,40 ns minimum,16384 records, raw ring, encoder and
+LUT/width arithmetic are unchanged from V17. Targeted changes:
+
+- Separate ODDR-only data FFs from fabric marker FFs, with identical logical
+  latency; use normal SAME_EDGE clock timing on ODDR inputs. The original
+  2.5 ns placement target is removed in the post-route repair revision.
+- Share a byte-grouped HIGH comparator between both output halves; preserve
+  existing pulse/marker latency and odd-HIGH2 ns resolution.
+- Split pulse terminal comparison into two registered16-bit halves and
+  predecode the shortest-period seed in the request-held bus mailbox. The seed
+  uses the existing4 ns bundled-data model; no global clock-pair exemption.
+- MAX_FANOUT hints only for WIDTH state, dispatch index and staging occupancy.
+  The capture/encoder datapath is retained. New placement/closure is unproven.
+
+External build helper: FPGA `prj/v0.94/scripts/build_tdc_v18.tcl`; instructions:
+`prj/v0.94/doc/tdc_v18_build_instructions.txt`. It archives previous build
+evidence, refreshes project-local imports, uses an installed performance
+strategy, completes optional post-route optimization and writes reports and
+checkpoint under `tdc_v18_reports/<timestamp>/`. It only writes bitstream/binary
+when setup/hold slack are nonnegative. No board programming is included.
+
+New notebook: `scpi-tests/tdc_rigol_v18_25mhz_characterisation.ipynb`, exact18
+guard, empty outputs, explicit complete_only retention, unchanged qualification
+gates. Preflight now records input_before_setup/selected_input. Keep the V17
+executed notebook as evidence: it remains byte-identical to the V18-task baseline.
+Fresh V18 RISE/FALL LUTs are required for the new route; existing V16/V17 API
+and SCPI minimum-period/diagnostic commands remain compatible without a new ABI.
+
+Capture policy: helpers default `capture_retention=complete_only`. Failed,
+partial and expected zero-yield DC attempts save compact metadata/flags/settings/
+errors/yield bookkeeping with csv=null; raw records remain in memory for checks.
+Only successful fully complete bursts get CSV/full diagnostics. Debug modes
+nonzero/all are explicit opt-ins. Offline review skips deliberately omitted raw.
+
+Historical cleanup completed:610 verified zero-complete CSVs removed,
+187339452 bytes (178.66 MiB). Compact metadata and605 retry/offset pointer
+updates retain failure/yield evidence. All463 nonzero-yield captures retain
+their original CSV sizes, including54 historical partial captures useful to
+the V17 assessment. No successful raw captures were removed. Cleanup script
+`scpi-tests/tdc_capture_cleanup.py` defaults to dry run; apply verifies CSV
+flags/counts, paths and hashes, changes one file at a time, and journals the
+operation. Audit and compressed original metadata are under
+`build/tdc-v18-review/cleanup-audit/`.
+
+Recovery from system breakdown: prior completed logs showed pulse holds1/2/3,
+legacy input isolation/default/reset, WIDTH holds1/2/3 and512-tap compatibility
+passed. Slang V18 component elaboration passed0 errors/0 warnings.25 Python
+tests pass (22 acquisition/retention plus3 cleanup). New notebook AST and Tcl
+completeness checks pass. The resumed512-tap25 MHz fine tests passed at both
+64 and16384 records: all record addresses, all16 full-depth banks, calibrated
+widths within40 ps in the ideal model, and all256 sparse timestamp pairs.
+This is functional verification, not physical timing closure or measured
+precision. No Vivado or live notebook cells ran. Saved V17 source/report/notebook hashes are in
+`build/tdc-v18-review/v17-baseline/manifest.json`.
+
+### V17 calibrated25 MHz captures and reload recovery, October26
+
+Run `20261026T075748_085860Z` completed80 offset captures. Candidate offsets
+by period were68:8,52:16,40:0 ns. Four fresh25 MHz alignment points obtained
+1024/1024 complete after1/4/3/2 source starts. Signal identity passed. These
+selected bursts demonstrate finite25 MHz operation; restarts still condition
+yield and no stable phase lock is established. Fine calibration qualified with
+196608 samples per edge,218 RISE/214 FALL populated bins,100% edge validity,
+CDF drift0.01413/0.00844 (limit0.03), no missing-code errors.
+
+Nine accepted25 MHz fine captures each contain8192 calibrated valid pulses,
+all73728 LUT-arithmetic checks match exactly. Across three source starts per
+width, fine results are:
+
+| Requested HIGH | Fine means across repeats | Within-burst SD | Bias range |
+|---|---|---|---|
+|12.2 ns|16.236,18.492,16.622 ns|91–121 ps|+4.036..+6.292 ns|
+|20.2 ns|22.749,22.431,22.641 ns|107–330 ps|+2.231..+2.549 ns|
+|28.2 ns|27.541,27.114,28.233 ns|99–189 ps|-1.086..+0.033 ns|
+
+Small per-burst SD does not remove bias or between-start mean shifts (up to
+2.256 ns for12.2 ns). Fine precision/accuracy and clock-phase dependence remain
+unresolved despite successful decoding and exact LUT arithmetic. All comparisons
+are against nominal AWG readback, not a scope reference. The last routed timing
+report still fails. Do not present this as timing closure or unbiased precision.
+
+The rate/duty cell accepted16 points with4096/4096 complete each:30/50/70%
+at1/5/10/14.705882/19.230769 MHz, plus25 MHz30%. Its25 MHz50% attempt lost
+SCPI with WinError10054 and cleanup on that broken connection was unconfirmed.
+The user then reloaded the bitstream and ran `bench.stop()`; STOP confirms OFF
+and idle. Re-running the rate cell starts at1 MHz and now stops *before ARM*
+with `Input changed since LUT upload; recalibrate`.
+
+Cause: bitstream reload resets input selection toLVDS and invalidates runtime
+LUT readiness/activation/upload state. The Python candidate can survive in the
+kernel. `bench.stop()` only reconnects, stops outputs and aborts capture; it
+does not restore SINGLE or calibration. A stop alone does not require new
+calibration. For the **exact same bitstream and unchanged measurement setup**,
+the qualified saved candidate can be restored with `bench.preflight()` (sets
+SINGLE, rechecks interface) then `bench.upload(candidate)` (writes both tables,
+checks exact readback, activates). This restores the earlier calibration; it
+does not fix observed bias/drift. Same VERSION is insufficient proof of same
+routed build. A changed implementation/input path requires new calibration;
+if exact build identity is uncertain, collect fresh calibration.
+
+Clarified the input-change exception and notebook STOP documentation to
+distinguish LUT restoration from new code-density collection. The guard still
+blocks fine ARM on reset/mismatched input; no automatic state bypass was added.
+Saved review and executed notebook snapshot in ignored
+`build/tdc-25mhz-review/calibration-reload-review-20261026/`. All analysis is
+offline; no board/instrument access, live cells or Vivado were run.
+
+### Frame-offset survey now runs before the blocking gate, October 25
+
+User requests a way to sweep the existing offsets despite the failed original
+input diagnostic. Added `frame_offset_survey` and a pre-gate section in the
+V17 notebook. Defaults scan every4 ns offset at periods68/52/40 ns (requested
+15/20/25 MHz, actual14.705882/19.230769/25 MHz), widths32.2/24.2/20.2 ns,
+512 frames, two passes:80 captures. No FPGA/API/SCPI change is needed.
+
+The helper uses normal `_acquire_once` status/integrity/cleanup checks and
+coarse-only capture, bypassing only host phase retries so partial/zero-yield
+bursts are retained as survey data. Every attempt saves CSV/JSON; an incrementally
+saved `frame_offset_survey_NNNN.json` lists capture paths, flags, completeness,
+repeats and per-offset aggregate yield. Transport/integrity/cleanup failures
+stop the survey. Original bench offset configuration is restored even on error.
+Suggested offsets are the first passing every repeat, selected by completeness
+only. All offsets are still tested; no width-error/SD/fine-validity selection.
+Independent source restarts confound phase with offset; suggestions are not
+proof of phase lock, stable association or a controlled phase scan.
+
+New notebook flow: configuration/setup/preflight, input diagnostic, optional
+GPIO check, **Frame-offset sweep**, **Apply candidates**, then fresh25 MHz
+alignment. Both DC tracking checks remain mandatory. The old unswept high-rate
+presence failure no longer prevents the survey or fresh25 MHz alignment.
+Candidate application merges per-period offsets, supports explicit manual
+overrides and saves `applied_frame_offsets.json`. Fresh alignment requires
+complete bursts before source identity/calibration. Original failed input
+diagnostic is retained; it is never relabelled as passed. The user can skip
+rerunning the survey with RUN_FRAME_OFFSET_SWEEP=False after configuring known
+offsets, but fresh alignment is still required. Default sweep may take minutes.
+
+Executed notebook evidence was backed up before editing in ignored
+`build/tdc-25mhz-review/frame-offset-sweep-review/before_offset_sweep.ipynb`.
+20 offline Python tests pass, including every legal offset/repeat, no retry
+selection, stable vs intermittent candidates, saved invalid frames, partial
+ledger retention and config restoration on failure. All notebook cells parse;
+synthetic execution of only the candidate-application and fresh-alignment gate
+cells confirms old unswept failures do not block fresh complete validation and
+fresh partial captures do block calibration. No live cells/instruments, board
+queries or Vivado were run. User should reopen/restart V17 notebook and run
+through the new survey/application section, then fresh validation.
+
+### After AWG restart: GPIO and 1–10 MHz coarse captures recover, October 25
+
+User restarted AWG and saved run `20261025T163543_487782Z`. The active V17
+notebook points to this run. GPIO snapshots now follow the four nominal HIGH
+duties2.02/10.02/50.02/80.02%: launch OFF gives4/14/65/101 HIGH per128 samples
+(3.125/10.938/50.781/78.906%); launch ON gives3/13/64/108
+(2.344/10.156/50/84.375%). Earlier OFF snapshots were128/128 at every width.
+This is strong evidence that the restart cleared the prior dynamic source/input
+anomaly; it does not identify the AWG setting or firmware cause. Polling remains
+an approximate duty/presence check, not independent width or edge metrology.
+DC controls still pass; all acquisition status/count/integrity and cleanup pass.
+
+Coarse-only diagnostic results (each512 frames, one source start per setting):
+
+| Rate | Requested HIGH | Valid pulses | Mean HIGH | Bias vs AWG readback | SD |
+|---|---|---|---|---|---|
+|1 MHz|500.2 ns|512/512|502.640625 ns|+2.440625 ns|1.896477 ns|
+|1 MHz|20.2 ns|512/512|23.468750 ns|+3.268750 ns|1.358816 ns|
+|5 MHz|100.2 ns|512/512|102.578125 ns|+2.378125 ns|1.916493 ns|
+|10 MHz|50.2 ns|512/512|52.000000 ns|+1.800000 ns|0 ns|
+|14.705882 MHz|32.2 ns|0/512|invalid|NO_FALL/HIGH_START/EXTRA_EDGES/SATURATED|—|
+|19.230769 MHz|24.2 ns|0/512|invalid|BOUNDARY in every frame|—|
+|25 MHz|20.2 ns|0/512|invalid|NO_FALL/HIGH_START/EXTRA_EDGES/SATURATED|—|
+
+All successful records carry VALID|COARSE_ONLY. Width now follows requested
+HIGH at1 MHz instead of both requests giving the same invalid480 ns interval.
+The4 ns coarse tick and positive~1.8..3.3 ns bias remain. The10 MHz zero SD
+means all512 records quantized to52 ns; it does not establish zero physical
+jitter or improved fine precision. No LUT calibration/fine captures ran.
+
+The remaining high-rate flags can arise from pulse/frame phase association:
+19.23 MHz FALL lands at the boundary; HIGH_START/missing accepted FALL at the
+other two rates is consistent with pulses spanning frames. One source start
+per point cannot establish a hard maximum working frequency or rule out
+sampler/timing issues. Next software investigation is the existing4 ns-grid
+frame-offset scan at failing rates, retaining every attempt and full records;
+do not bypass completeness/boundary gates. Routed timing remains unclosed
+(last supplied report WNS-0.308 ns,11 setup endpoints). The current alignment
+guard correctly stops the notebook before fine characterization at25 MHz.
+
+Reviewed saved evidence offline only. No live board/instrument operations,
+Vivado, source-code changes or additional tests were performed in this review.
+
+### Latest result: GPIO pulse snapshots remain HIGH, October 25
+
+Inspected executed V17 notebook and external run `20261025T155050_597050Z`,
+including all ten capture CSV/JSON pairs and the GPIO-only follow-up. DC0/3.3/0
+still passes GPIO and WIDTH. All3584 pulse frames are invalid with HIGH_START
+and EXTRA_EDGES; at25 MHz every512-record frame also has NO_FALL|SATURATED.
+At1 MHz both500.2 and20.2 ns requests again give120 coarse ticks=480 ns in
+invalid records; this is not a qualified width measurement.
+
+The new decisive observation is outside WIDTH: with WIDTH idle and launch
+OFF, all512/512 GPIO snapshots are HIGH across four1 MHz pulse settings:
+20.2/100.2/500.2/800.2 ns, nominal2.02/10.02/50.02/80.02% HIGH. With launch
+ON,506/512 snapshots are HIGH (126/127/127/126 per128-sample condition).
+The October23 `20261023T223530_174733Z` GPIO run shows the same all-HIGH OFF
+pattern. Active AWG queries report PULS, LOW0/HIGH3.3 V and matching width/duty;
+both diagnostic runs finish without errors and confirm output cleanup.
+
+Thus GPIO snapshots fail to follow programmed duty even with WIDTH inactive
+and DIO1_P unconnected. The dynamic discrepancy extends to the input waveform
+or GPIO input/readback path; the data does not establish a fine-encoder fault
+or a25 MHz throughput limit. Slow jittered polling can alias and cannot prove
+the pin is continuously HIGH or independently measure its duty/frequency.
+DC passing makes a simple permanent disconnect/reset less consistent, but does
+not validate dynamic signal levels or timing. Do not infer the physical fault
+from command readbacks alone.
+
+Source inspection: `RP_DigitalPinStateQ -> rp_DpinGetState -> rp_GPIOpGetState`
+reads housekeeping `ex_ci_p`, not the output latch. HK offset0x20 reads
+`exp_p_dat_i`; the top connects the DIO2_P input-only IOBUF to that bus and
+WIDTH. This verifies intended workspace behavior, not deployed API/image hash.
+The supplied routed report remains October23 with WNS-0.308 ns/11 setup
+failures; there is no newer timing-closure evidence.
+
+Next discriminating check: independently observe the actual CH1 signal at
+DIO2_P/E1 pin7 with launch OFF, first1 MHz/100.2 ns HIGH, then1 MHz/800.2 ns
+HIGH. Verify both HIGH and LOW durations/levels, not just a sharp rising edge.
+If the waveform follows settings at the source but not the FPGA pin, inspect
+the connection. If the waveform at the pin is correct, focus on FPGA input,
+GPIO readback/deployed mapping and timing, then WIDTH capture. Repeating the
+same polling loop or bypassing the alignment guard does not resolve this.
+
+Saved numerical review and byte-identical executed notebook snapshot in ignored
+`build/tdc-25mhz-review/gpio-review-20261025/`; external evidence is intact.
+This turn changed documentation only in tracked sources. No live hardware,
+notebook execution, Vivado, source-code changes or additional tests were run.
+
+### Latest follow-up: DC passes; every pulse frame is invalid, October 23
+
+User's `20261023T221201_271388Z` run completed all ten input diagnostics.
+DC LOW/HIGH/LOW gives the expected GPIO0/1/0 (8/8 each) and WIDTH flags6/2062/6
+(512/512 each); both static input checks pass. User explicitly confirms **Rigol
+CH1 directly to DIO2_P/E1 pin7; DIO1_P/E1 pin5 unconnected**. No PCB or external
+launch loopback is in this test. Do not attribute these results to the PCB.
+
+All3584 pulse frames are invalid. All have HIGH_START|EXTRA_EDGES. At1,5,10
+and19.230769 MHz,512/512 frames record both edges; at14.705882 MHz510/512
+record FALL, and at25 MHz0/512 record FALL (512/512 still report RISE).
+The 25 MHz flags are2076=NO_FALL|HIGH_START|EXTRA_EDGES|SATURATED, replacing
+the earlier all-missing-edge pattern. Status/count/integrity/cleanup pass.
+The alignment RuntimeError is the intentional input-presence guard, not a host
+exception to bypass. Successful static checks do not qualify dynamic capture.
+
+Most revealing: the1 MHz500.2 ns and20.2 ns source settings both produce
+approximately480 ns between the stored timestamps (coarse120 ticks almost
+every frame). Other invalid-frame intervals are~80 ns at5 MHz,32 ns at10 MHz,
+16 ns at14.705882 MHz and8 ns at19.230769 MHz: roughly half the frame period
+minus16..20 ns. These are **unqualified diagnostic intervals, not measured HIGH
+widths**, since HIGH_START/EXTRA_EDGES invalidate association. Their failure to
+follow requested width is unresolved; source/physical waveform, sample path,
+edge association and failed timing remain candidates. No HDL fix is proven.
+Pulse readbacks report PULS, correct width/voltage, output ON and no new errors.
+The command forms for APPLy:PULSe, FUNCtion:PULSe:WIDTh and DCYCle agree with
+Rigol's guide (sections3.12.2.5/3.12.18):
+https://download.rigol.com/en/Manual/Waveform%20Generator/DG5000%20Pro/DG5000Pro_ProgrammingGuide_EN.pdf
+
+Added `gpio_pulse_diagnostic` after the input diagnostic and before alignment
+in the V17 notebook. It runs when input presence fails:20.2/100.2/500.2/800.2 ns
+at1 MHz,128 jittered DIO2_P snapshots each with launch OFF and then ON. WIDTH
+stays idle, no ARM or LUT is used. Active output width and independently queried
+duty-cycle readbacks are retained. High fractions are only presence/duty clues:
+slow polling can alias, misses transitions, and cannot measure frequency,
+edge sharpness or pulse width. A scope at the input remains the independent
+arbiter if results are ambiguous. It saves `gpio_pulse_diagnostic.json`, all
+snapshots/host timings/readbacks and confirms cleanup; no new acceptance gate.
+Source or capture diagnosis must be established before changing edge handling.
+
+The saved notebook and all ten captures were inspected offline; original
+notebook snapshot and analysis are in ignored
+`build/tdc-25mhz-review/input-diagnostic-followup/`. External evidence is intact.
+18 offline Python tests pass, including GPIO-only OFF/ON sequencing, no WIDTH
+ARM, complete snapshot export and output cleanup/partial evidence on a synthetic
+GPIO read failure. All notebook cells parse. No board/instrument query, Vivado
+run, HDL modification or live notebook execution occurred in this follow-up.
+Next: user restarts kernel and runs through **GPIO pulse check with WIDTH idle
+and launch OFF/ON**, then inspects its JSON. Alignment remains blocked. These
+software changes need no FPGA rebuild.
+
+### Latest measurement: V17 has no detected edges, October 23
+
+The user ran the new V17 notebook. Run directory
+`20261023T142127_159686Z` under external local-data `scpi-tests/tdc_rigol_results`
+contains 50 attempts of 1024 frames each. **All 51,200 raw records have flags
+exactly 0x6 (NO_RISE|NO_FALL), zero width and no fine statuses.** Every burst
+reports DONE=8/count1024, record integrity passes and cleanup has no errors.
+There is no reported overflow, extra-edge or boundary-cut population. This is
+missing-edge capture, not evidence that fine interpolation rejected the pulses.
+No measured precision, bias or resolution can be inferred from these zero widths.
+Sparse equal rise/fall timestamps are defaults for missing edges, not arrivals.
+
+AWG CH1 readbacks are 25 MHz, period40 ns, HIGH20.2 ns, LOW19.8 ns,
+0..3.3 V, HighZ, normal polarity, internal clock. Output ON was queried as1;
+this establishes command state, not voltage at DIO2_P. SINGLE was read back.
+Workspace input routing still reserves DIO2_P/E1 pin7 as input-only and routes
+it to WIDTH, separately from DIO1_P/E1 pin5 launch. Physical connection,
+actual pin waveform and loaded bitstream content remain unverified.
+The seven current flat imported source files for top-level, TDC top/registers,
+carry sampler, WIDTH controller, population pipeline and pulse generator match
+the workspace after normalizing line endings. This verifies the imported files,
+not which source files the existing implemented/loaded artifact actually used.
+
+The supplied routed report has now been replaced by an October23,14:25:04
+report: **WNS -0.308 ns, TNS -0.797 ns, 11 failing setup endpoints, WHS
++0.049 ns, no hold failures.** Shown violations include pulse ODDR D1/D2,
+phase-last logic/config transfer, WIDTH state-to-status/completion control,
+raw-slot readout and rise timestamp enable. These do not by themselves prove
+the cause of every record missing both edges. No sampler-reset endpoint is
+among the displayed violations; this is not proof all sampler paths are sound.
+The loaded image reports17 but its artifact hash was not queried. Preserved
+report, both executed notebooks and analysis are under ignored
+`build/tdc-25mhz-review/no-edge-evidence/`; external CSV/JSON files are intact.
+
+Updated V17 notebook starts with preflight, then `input_path_diagnostic` before
+alignment: settled DC0/3.3/0 V, eight `DIG:PIN? DIO2_P` reads per control and
+WIDTH DC state flags; then one coarse burst per rate from1 to25 MHz, including
+20.2 ns HIGH at both1 and25 MHz. Actual common periods/rates are saved (the
+4 ns grid rounds15/20 MHz). No retries, filtering, LUT or yield selection in
+this diagnostic; each normal acquisition retains integrity checks and cleanup.
+If GPIO fails DC tracking, check selected AWG channel, common ground and direct
+connection to E1 pin7. If GPIO passes but WIDTH DC states fail, investigate
+SINGLE mux/carry sampler/reset/image. If static checks pass but pulses disappear,
+use wide/narrow and rate results to isolate dynamic signal/sampler behavior.
+The notebook keeps calibration/alignment gated on input presence, and ordinary
+phase retries now fail early for an all-missing-edge burst. Boundary-cut cases
+can still retry; no completeness or fine-validation rule was relaxed.
+
+17 offline Python tests passed, including real acquisition code with mocked
+DC pin/status responses, DC waveform/readback verification, missing-edge retry
+termination, retained partial-pulse retry and diagnostic classification. No
+hardware or instruments were contacted; no Vivado or live notebook cells ran.
+Next user action: restart kernel, run V17 notebook through **Input-path
+diagnostic**, inspect its JSON/output before proceeding to alignment. V17 can
+run this diagnostic as loaded; these software changes need no FPGA rebuild.
+
+### Latest update: V17 25 MHz pipeline and V16 routed timing review, October 23
+
+User reports V16 loaded and requests starting at25 MHz acquisition, with API/SCPI
+changes authorized where necessary. **Code/offline checks only**: do not run Vivado
+or query/control hardware/instruments; the user builds and runs measurements.
+Active source is now **VERSION17 / ID0x54444311**, not built/deployed here.
+
+V16 routed report at the supplied `C:/vivadoprj/.../impl_1/` path is dated
+October22,23:10:12: **WNS-0.635 ns, TNS-17.879 ns,198 setup endpoints,0 hold**.
+184 setup failures are250 MHz, with worst paths from encoder shift registers
+into32-lane chunk leading/population/multiple-transition logic. Four125 MHz
+ASG pointer endpoints fail up to83 ps; ten pulse reset recovery endpoints fail
+up to107 ps. The PS AXI200 MHz group now passes+0.050 ns. This supersedes the
+earlier V15 report, and shows V16's wider chunk encoder failed routed timing.
+Detailed max_paths output need not enumerate all198 failing endpoints.
+
+- Preserved V16 sources, user's current notebook, supplied report and available
+  bit/bit.bin files in ignored `build/tdc-25mhz-review/v16-baseline/manifest.json`.
+  Report SHA256 `de27a9eeb0bc58ca570a90143d6c57805835e76e85f9e050d45ec37e7e2abae0`;
+  .bit SHA256 `64f645cf642d32064f675e12c9894daa1917c17fc22362f1592f51167f2b0ce5`.
+  These identify saved build artifacts; loaded device hash was not verified.
+  The active V16 notebook remained byte-identical to its start-of-task snapshot.
+- WIDTH now uses `tdc_population_pipeline.sv`: one registered binary-tree level
+  per clock,512-tap latency12 clocks, encoder initiation every clock. Exact raw
+  population, majority validation, <=8-tap bounded span and status/rank meaning
+  are retained. Data registers have no global reset/enable; validity is flushed.
+  Legacy iterative encoder remains available for legacy launch-to-return mode.
+- Raw dispatch and result retirement are independent. Four raw slots release
+  after copying into encoder inputs;96-bit metadata follows the exact12-clock
+  validity latency. Nine-clock signed result arithmetic accepts one frame every
+  ten fast clocks. Default minimum is **40 ns /25 MHz** at unchanged250 MHz,
+  4000 ps tick. No sampling-clock frequency increase.16384 periods span655.36 us.
+  Capacity, six-field record ABI, signed/frozen correction, sparse timestamp
+  interface, frame offsets and integrity/calibration gates are unchanged.
+- Missing/extra encoder completion, result overlap or raw ring overrun returns
+  DONE|OVERFLOW with no published records. Abort/rearm flushes pending validity.
+  Completion still drains result arithmetic and global/bank-local writes.
+- Pulse reset repair uses an active-high reset FF directly driving ODDR R,
+  replacing the reported inverter path. Internal fast controls use a synchronous
+  local reset leaf; asynchronous ODDR LOW and GPIO release with clock loss/reset
+  remain. XDC updates only the external reset assertion endpoint from CLR to PRE;
+  functional release and ODDR recovery remain timed. ASG pointer addition uses
+  8-bit local carry-select with logarithmic group-carry prefix; same combinational
+  result and cycle behavior, no cached settings or new pointer latency.
+- These are source timing repair candidates. Registered trees add FF/routing;
+  new routed timing, resource fit, DRC, CDC and sampler placement need external
+  implementation. Do not attribute V16 WNS or simulated ideal accuracy to V17.
+
+Offline checks passed:
+
+- Full512-tap/16384-record **40 ns /25 MHz** fine capture: all record addresses,
+  expected widths within40 ps in the ideal model, CAL_USED/no coarse fallback,
+  all256 sparse edge tick pairs matched coarse widths, no staging overflow.
+- Independent encoder reference: exhaustive65536 16-tap patterns,300 17-tap and
+  2775 512-tap cases. Consecutive stream launches, gaps and in-flight reset:
+  3266/3230/106 checked outputs at16/17/512 taps. The original4096-vector512-tap
+  stress was stopped for excessive simulator runtime and replaced with a bounded
+  128-launch case; only the completed PASS run is counted.
+- Controller holds1/2/3, signed extremes, frozen LUT results, malformed/missing
+  pulses, boundary reads, wrap, watchdog, abort/rearm, missing-completion fault
+  and independently stalled raw-ring overflow;2 MHz compatibility and legacy
+  TDC integration. Pulse generator holds1/2/3 passed using vendor ODDR model,
+  including clock-stop asynchronous reset, restart and marker behavior.
+- ASG adder equivalence:65555 exhaustive/corner8-bit cases and50000 random cases
+  plus carry boundaries for63/64/67-bit shapes and8/16-bit group sizes.
+- API/actual pinned SCPI parser host regression passed V17 VERSION17, minimum40,
+  40 ns ARM/watchdog52 clocks,36 ns rejection and unchanged diagnostics. Existing
+  V16 software already reads the hardware minimum dynamically: **no new API ABI
+  or SCPI commands/binary changes are necessary**. Host check uses GCC6.2/C++14
+  with existing Windows shims; it is not a Linux/ARM production build.
+- 13 offline Python tests passed, including exactV17/minimum40 checks, old-image
+  rate guards,25 MHz planning/overspeed/matched-period checks and V16 acquisition
+  compatibility. Slang12 component elaboration against actual vendor primitive
+  declarations passed **0 errors/0 warnings**; Vivado was not invoked.
+
+Fine timing at25 MHz is still a measurement issue: >=8 ns HIGH/LOW guarantees
+only the stated sampled-level detection contract. Full-line delay/history can
+invalidate short pulses even with a coarse-valid interval. An8.2 ns pulse failed
+fine validation in the ideal10.24 ns-line test; rejection was retained. Initial
+fine qualification uses12..28 ns HIGH at40 ns period, not a blanket25 MHz duty
+or precision guarantee. Actual line delay/PVT and previous width bias/drift need
+hardware data; no filtering, trimming or jitter-based retry was added.
+
+New user-run notebook: **`scpi-tests/tdc_rigol_25mhz_characterisation.ipynb`**.
+It explicitly expects17/minimum40, starts with25 MHz alignment/source identity,
+collects fresh density at established~1 MHz rates, then validates25 MHz transfer,
+coarse/fine repeats at12.2/20.2/28.2 ns,30/50/70% duty/rate coverage and full capacity.
+The existing `tdc_rigol_characterisation.ipynb` stays V16 and unchanged; helper
+defaults remain16 for compatibility. New notebook outputs are empty; no live
+cells ran. Results still save outside the checkout under local data.
+
+Next: source the same `refresh_custom_sources.tcl` (now explicitly requires the
+new encoder and prints V17/ID0x54444311), reset synthesis/implementation and build
+externally. Check full setup/hold, utilization, CDC/DRC and physical sampler audit;
+updated collection checks must find new tree registers/reset PRE endpoint. Load
+V17 with existing V16-capable API/SCPI, enter actual new WNS/build identity in the
+25 MHz notebook, restart kernel and run fresh calibration/tests. Hardware25 MHz
+operation, physical precision and V17 routed closure remain unverified.
+
+### Historical update: V16 5 MHz source and precision investigation, October 22
 
 User requested a **5 MHz working-rate target** plus an attempt to resolve broad
 width distributions/precision. **Code and offline checks only**: the user builds
@@ -473,12 +1217,12 @@ output have been moved outside the API/SCPI repository to:
 - The current priorities above supersede LVDS recommendations in the retained
   legacy sections below. Do not switch back to LVDS as a routine next step.
 
-Active source is **VERSION16 / ID0x54444310**, adding a5 MHz burst target,
-pipelined transition span and sparse edge timestamps to V15 capture. Latest
-user-completed measurements are V15; V16 was not built/loaded here. Its new
-routed timing is unknown. The supplied V15 route has WNS-0.023 ns/3 setup
-failures; loaded bitstream hash remains unverified. The preserved v12 baseline's
-passing timing must not be attributed to V14, V15 or the V16 source.
+Active source is **VERSION17 / ID0x54444311**, adding a25 MHz burst target with
+registered encoder trees and overlapping frame dispatch. The user reports V16
+loaded; its supplied route failed WNS-0.635 ns/198 setup endpoints. V17 was not
+built/loaded here and its routed timing is unknown. Loaded-device bitstream
+hash remains unverified. The preserved v12 baseline's passing timing must not
+be attributed to V14/V15/V16/V17.
 BNET remains excluded; single-ended input remains the active focus.
 
 ### October 22: user-authorized restart-to-complete tests (current policy)

@@ -18,5 +18,6 @@
 // extern scpi_t scpi_context;
 
 scpi_t* initContext(bool arduinoMode);
+const scpi_command_t* rp_scpi_CommandsForVersion(uint32_t version);
 
 #endif /* SCPI_COMMANDS_H_ */

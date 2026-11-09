@@ -10,6 +10,18 @@ static scpi_result_t pulse_result(scpi_t* context, int result, bool query = fals
     return SCPI_RES_ERR;
 }
 
+scpi_result_t RP_PulseDuty(scpi_t* context) {
+    double duty = 0;
+    if (!SCPI_ParamDouble(context, &duty, true)) return SCPI_RES_ERR;
+    return pulse_result(context, rp_PulseSetDutyCycle(duty));
+}
+scpi_result_t RP_PulseDutyQ(scpi_t* context) {
+    double duty = 0;
+    if (pulse_result(context, rp_PulseGetDutyCycle(&duty), true) != SCPI_RES_OK) return SCPI_RES_ERR;
+    SCPI_ResultDouble(context, duty);
+    return SCPI_RES_OK;
+}
+
 scpi_result_t RP_PulseReset(scpi_t* context) {
     return pulse_result(context, rp_PulseReset());
 }

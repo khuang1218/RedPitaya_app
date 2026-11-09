@@ -1,0 +1,19 @@
+#ifndef DAC_SPI_SCPI_H
+#define DAC_SPI_SCPI_H
+#include "scpi/scpi.h"
+scpi_result_t RP_DacSpiStatusQ(scpi_t*);
+scpi_result_t RP_DacSpiPeriod(scpi_t*);
+scpi_result_t RP_DacSpiPeriodQ(scpi_t*);
+scpi_result_t RP_DacSpiFrequency(scpi_t*);
+scpi_result_t RP_DacSpiFrequencyQ(scpi_t*);
+scpi_result_t RP_DacSpiLdacWidth(scpi_t*);
+scpi_result_t RP_DacSpiLdacWidthQ(scpi_t*);
+scpi_result_t RP_DacSpiWeights(scpi_t*);
+scpi_result_t RP_DacSpiLoad(scpi_t*);
+scpi_result_t RP_DacSpiWeightsQ(scpi_t*);
+scpi_result_t RP_DacSpiAppliedQ(scpi_t*);
+scpi_result_t RP_DacSpiApply(scpi_t*);
+scpi_result_t RP_DacSpiRawWrite(scpi_t*);
+scpi_result_t RP_DacSpiRawReadQ(scpi_t*);
+scpi_result_t RP_DacSpiCountersQ(scpi_t*);
+#endif
